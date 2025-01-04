@@ -16,7 +16,6 @@
 #include "Common/TimeUtil.h"
 #include "Common/File/FileUtil.h"
 #include "Common/Serialize/Serializer.h"
-#include "Common/Log/StdioListener.h"
 #include "Common/Input/InputState.h"
 #include "Common/Thread/ThreadUtil.h"
 #include "Common/Thread/ThreadManager.h"
@@ -40,7 +39,7 @@
 #include "Core/ELF/ParamSFO.h"
 
 #include "GPU/GPUState.h"
-#include "GPU/GPUInterface.h"
+#include "GPU/GPUCommon.h"
 #include "GPU/Common/FramebufferManagerCommon.h"
 #include "GPU/Common/TextureScalerCommon.h"
 #include "GPU/Common/PresentationCommon.h"
@@ -90,7 +89,6 @@ static struct {
 #define VSYNC_SWAP_INTERVAL_RUN_SPEED_THRESHOLD 5.0f
 
 static bool libretro_supports_bitmasks = false;
-static bool libretro_supports_option_categories = false;
 static bool show_ip_address_options = true;
 static bool show_upnp_port_option = true;
 static bool show_detect_frame_rate_option = true;
@@ -293,41 +291,27 @@ namespace Libretro
 
 using namespace Libretro;
 
-class PrintfLogger : public LogListener
-{
-   public:
-      PrintfLogger(retro_log_callback log) : log_(log.log) {}
-      void Log(const LogMessage &message)
-      {
-         switch (message.level)
-         {
-            case LogLevel::LVERBOSE:
-            case LogLevel::LDEBUG:
-               log_(RETRO_LOG_DEBUG, "[%s] %s",
-                     message.log, message.msg.c_str());
-               break;
+void RetroLogCallback(const LogMessage &message, void *userdata) {
+   retro_log_printf_t fn = (retro_log_printf_t)userdata;
+   switch (message.level) {
+   case LogLevel::LVERBOSE:
+   case LogLevel::LDEBUG:
+      (fn)(RETRO_LOG_DEBUG, "[%s] %s", message.log, message.msg.c_str());
+      break;
 
-            case LogLevel::LERROR:
-               log_(RETRO_LOG_ERROR, "[%s] %s",
-                     message.log, message.msg.c_str());
-               break;
-            case LogLevel::LNOTICE:
-            case LogLevel::LWARNING:
-               log_(RETRO_LOG_WARN, "[%s] %s",
-                     message.log, message.msg.c_str());
-               break;
-            case LogLevel::LINFO:
-            default:
-               log_(RETRO_LOG_INFO, "[%s] %s",
-                     message.log, message.msg.c_str());
-               break;
-         }
-      }
-
-   private:
-      retro_log_printf_t log_;
-};
-static PrintfLogger *printfLogger;
+   case LogLevel::LERROR:
+      (fn)(RETRO_LOG_ERROR, "[%s] %s", message.log, message.msg.c_str());
+      break;
+   case LogLevel::LNOTICE:
+   case LogLevel::LWARNING:
+      (fn)(RETRO_LOG_WARN, "[%s] %s", message.log, message.msg.c_str());
+      break;
+   case LogLevel::LINFO:
+   default:
+      (fn)(RETRO_LOG_INFO, "[%s] %s", message.log, message.msg.c_str());
+      break;
+   }
+}
 
 static bool set_variable_visibility(void)
 {
@@ -405,7 +389,8 @@ void retro_set_environment(retro_environment_t cb)
 {
    environ_cb = cb;
 
-   libretro_set_core_options(environ_cb, &libretro_supports_option_categories);
+   bool option_categories = false;
+   libretro_set_core_options(environ_cb, &option_categories);
    struct retro_core_options_update_display_callback update_display_cb;
    update_display_cb.callback = set_variable_visibility;
    environ_cb(RETRO_ENVIRONMENT_SET_CORE_OPTIONS_UPDATE_DISPLAY_CALLBACK, &update_display_cb);
@@ -651,6 +636,14 @@ static void check_variables(CoreParameter &coreParam)
          g_Config.bAnalogIsCircular = true;
    }
 
+   var.key = "ppsspp_analog_deadzone";
+   if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
+      g_Config.fAnalogDeadzone = atof(var.value);
+
+   var.key = "ppsspp_analog_sensitivity";
+   if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
+      g_Config.fAnalogSensitivity = atof(var.value);
+   
    var.key = "ppsspp_memstick_inserted";
    if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
    {
@@ -1196,18 +1189,15 @@ static const struct retro_controller_info ports[] =
 void retro_init(void)
 {
    TimeInit();
+   SetCurrentThreadName("Main");
 
    struct retro_log_callback log;
    if (environ_cb(RETRO_ENVIRONMENT_GET_LOG_INTERFACE, &log))
    {
       log_cb = log.log;
-      LogManager::Init(&g_Config.bEnableLogging);
-      printfLogger = new PrintfLogger(log);
-      LogManager* logman = LogManager::GetInstance();
-      logman->RemoveListener(logman->GetStdioListener());
-      logman->RemoveListener(logman->GetDebuggerListener());
-      logman->ChangeFileLog(nullptr);
-      logman->AddListener(printfLogger);
+      g_logManager.Init(&g_Config.bEnableLogging);
+      g_logManager.SetOutputsEnabled(LogOutput::ExternalCallback);
+      g_logManager.SetExternalLogCallback(&RetroLogCallback, (void *)log_cb);
    }
 
    VsyncSwapIntervalReset();
@@ -1241,7 +1231,7 @@ void retro_init(void)
    g_Config.iInternalResolution = 0;
 
    // Log levels must be set after g_Config.Load
-   LogManager::GetInstance()->SetAllLogLevels(LogLevel::LINFO);
+   g_logManager.SetAllLogLevels(LogLevel::LINFO);
 
    const char* nickname = NULL;
    if (environ_cb(RETRO_ENVIRONMENT_GET_USERNAME, &nickname) && nickname)
@@ -1264,7 +1254,7 @@ void retro_init(void)
    g_Config.flash0Directory = retro_base_dir / "flash0";
    g_Config.internalDataDirectory = retro_base_dir;
    g_Config.bEnableNetworkChat = false;
-   g_Config.bDiscordPresence = false;
+   g_Config.bDiscordRichPresence = false;
 
    g_VFS.Register("", new DirectoryReader(retro_base_dir));
 
@@ -1276,14 +1266,10 @@ void retro_init(void)
 void retro_deinit(void)
 {
    g_threadManager.Teardown();
-   LogManager::Shutdown();
+   g_logManager.Shutdown();
    log_cb = NULL;
 
-   delete printfLogger;
-   printfLogger = nullptr;
-
    libretro_supports_bitmasks = false;
-   libretro_supports_option_categories = false;
 
    VsyncSwapIntervalReset();
 
@@ -1346,8 +1332,8 @@ namespace Libretro
 
       gpu->BeginHostFrame();
 
-      coreState = CORE_RUNNING;
-      PSP_RunLoopUntil(UINT64_MAX);
+      coreState = CORE_RUNNING_CPU;
+      PSP_RunLoopWhileState();
 
       gpu->EndHostFrame();
 
@@ -1359,7 +1345,7 @@ namespace Libretro
 
    static void EmuThreadFunc()
    {
-      SetCurrentThreadName("Emu");
+      SetCurrentThreadName("EmuThread");
 
       for (;;)
       {
@@ -1375,7 +1361,7 @@ namespace Libretro
                emuThreadState = EmuThreadState::PAUSED;
                /* fallthrough */
             case EmuThreadState::PAUSED:
-               sleep_ms(1);
+               sleep_ms(1, "libretro-paused");
                break;
             default:
             case EmuThreadState::QUIT_REQUESTED:
@@ -1424,7 +1410,7 @@ namespace Libretro
       ctx->ThreadFrame(); // Eat 1 frame
 
       while (emuThreadState != EmuThreadState::PAUSED)
-         sleep_ms(1);
+         sleep_ms(1, "libretro-pause-poll");
    }
 
 } // namespace Libretro
@@ -1501,7 +1487,7 @@ bool retro_load_game(const struct retro_game_info *game)
    struct retro_core_option_display option_display;
 
    // Show/hide 'MSAA' and 'Texture Shader' options, Vulkan only
-   option_display.visible = (g_Config.iGPUBackend == (int)GPUBackend::VULKAN) ? true : false;
+   option_display.visible = (g_Config.iGPUBackend == (int)GPUBackend::VULKAN);
 #if 0 // see issue #16786
    option_display.key = "ppsspp_mulitsample_level";
    environ_cb(RETRO_ENVIRONMENT_SET_CORE_OPTIONS_DISPLAY, &option_display);
@@ -1511,7 +1497,7 @@ bool retro_load_game(const struct retro_game_info *game)
 
    // Show/hide 'Buffered Frames' option, Vulkan/GL only
    option_display.visible = (g_Config.iGPUBackend == (int)GPUBackend::VULKAN ||
-         g_Config.iGPUBackend == (int)GPUBackend::OPENGL) ? true : false;
+         g_Config.iGPUBackend == (int)GPUBackend::OPENGL);
    option_display.key = "ppsspp_inflight_frames";
    environ_cb(RETRO_ENVIRONMENT_SET_CORE_OPTIONS_DISPLAY, &option_display);
 
@@ -1602,19 +1588,22 @@ static void retro_input(void)
    float x_right = input_state_cb(0, RETRO_DEVICE_ANALOG, RETRO_DEVICE_INDEX_ANALOG_RIGHT, RETRO_DEVICE_ID_ANALOG_X) / 32767.0f;
    float y_right = input_state_cb(0, RETRO_DEVICE_ANALOG, RETRO_DEVICE_INDEX_ANALOG_RIGHT, RETRO_DEVICE_ID_ANALOG_Y) / -32767.0f;
 
-   __CtrlSetAnalogXY(CTRL_STICK_LEFT, x_left, y_left);
-   __CtrlSetAnalogXY(CTRL_STICK_RIGHT, x_right, y_right);
-
-   // Analog circle vs square gate compensation
-   // copied from ControlMapper.cpp's ConvertAnalogStick function
+   // Analog circle vs square gate compensation,
+   // deadzone and sensitivity copied from ControlMapper.cpp's
+   // ConvertAnalogStick and MapAxisValue functions
    const bool isCircular = g_Config.bAnalogIsCircular;
 
    float norm = std::max(fabsf(x_left), fabsf(y_left));
 
    if (norm == 0.0f)
+   {
+      __CtrlSetAnalogXY(CTRL_STICK_LEFT, x_left, y_left);
+      __CtrlSetAnalogXY(CTRL_STICK_RIGHT, x_right, y_right);
       return;
+   }
 
-   if (isCircular) {
+   if (isCircular)
+   {
       float newNorm = sqrtf(x_left * x_left + y_left * y_left);
       float factor = newNorm / norm;
       x_left *= factor;
@@ -1622,7 +1611,18 @@ static void retro_input(void)
       norm = newNorm;
    }
 
+   const float deadzone = g_Config.fAnalogDeadzone;
+   const float sensitivity = g_Config.fAnalogSensitivity;
+   const float sign = norm >= 0.0f ? 1.0f : -1.0f;
    float mappedNorm = norm;
+
+   // Apply deadzone
+   mappedNorm = Libretro::clamp((fabsf(mappedNorm) - deadzone) / (1.0f - deadzone), 0.0f, 1.0f);
+
+   // Apply sensitivity
+   if (mappedNorm != 0.0f)
+      mappedNorm = Libretro::clamp(mappedNorm * sensitivity * sign, -1.0f, 1.0f);
+
    x_left = Libretro::clamp(x_left / norm * mappedNorm, -1.0f, 1.0f);
    y_left = Libretro::clamp(y_left / norm * mappedNorm, -1.0f, 1.0f);
 
@@ -1636,7 +1636,7 @@ void retro_run(void)
    {
       std::string error_string;
       while (!PSP_InitUpdate(&error_string))
-         sleep_ms(4);
+         sleep_ms(4, "libretro-init-poll");
 
       if (!PSP_IsInited())
       {
@@ -1728,7 +1728,7 @@ bool retro_serialize(void *data, size_t size)
    if (useEmuThread)
    {
       EmuThreadStart();
-      sleep_ms(4);
+      sleep_ms(4, "libretro-serialize");
    }
 
    return retVal;
@@ -1751,7 +1751,7 @@ bool retro_unserialize(const void *data, size_t size)
    if (useEmuThread)
    {
       EmuThreadStart();
-      sleep_ms(4);
+      sleep_ms(4, "libretro-unserialize");
    }
 
    return retVal;

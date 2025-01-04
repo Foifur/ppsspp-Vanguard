@@ -13,15 +13,9 @@
 // hash = md5_finalize()
 
 #include <algorithm>
-#include <atomic>
-#include <cstdarg>
-#include <cstdlib>
-#include <ctime>
-#include <functional>
 #include <set>
 #include <string>
 #include <vector>
-#include <mutex>
 
 #include "ext/rcheevos/include/rcheevos.h"
 #include "ext/rcheevos/include/rc_client.h"
@@ -38,8 +32,7 @@
 #include "Common/Crypto/md5.h"
 #include "Common/Log.h"
 #include "Common/File/Path.h"
-#include "Common/File/FileUtil.h"
-#include "Common/Net/HTTPClient.h"
+#include "Common/Net/HTTPRequest.h"
 #include "Common/System/OSD.h"
 #include "Common/System/System.h"
 #include "Common/System/NativeApp.h"
@@ -53,13 +46,9 @@
 
 #include "Core/MemMap.h"
 #include "Core/Config.h"
-#include "Core/CoreParameter.h"
 #include "Core/Core.h"
 #include "Core/System.h"
-#include "Core/FileLoaders/LocalFileLoader.h"
 #include "Core/FileSystems/BlockDevices.h"
-#include "Core/ELF/ParamSFO.h"
-#include "Core/FileSystems/MetaFileSystem.h"
 #include "Core/FileSystems/ISOFileSystem.h"
 #include "Core/RetroAchievements.h"
 
@@ -68,6 +57,8 @@
 #include "Windows/MainWindow.h"
 
 #endif
+
+static const char *const RAINTEGRATION_FILENAME = "RAIntegration.dll";
 
 static bool HashISOFile(ISOFileSystem *fs, const std::string filename, md5_context *md5) {
 	int handle = fs->OpenFile(filename, FILEACCESS_READ);
@@ -554,7 +545,7 @@ static void raintegration_event_handler(const rc_client_raintegration_event_t *e
 		break;
 	case RC_CLIENT_RAINTEGRATION_EVENT_PAUSE:
 		// The toolkit has hit a breakpoint and wants to pause the emulator. Do so.
-		Core_EnableStepping(true, "ra_breakpoint");
+		Core_Break("ra_breakpoint");
 		break;
 	case RC_CLIENT_RAINTEGRATION_EVENT_HARDCORE_CHANGED:
 		// Hardcore mode has been changed (either directly by the user, or disabled through the use of the tools).
@@ -563,7 +554,7 @@ static void raintegration_event_handler(const rc_client_raintegration_event_t *e
 		g_Config.bAchievementsHardcoreMode = rc_client_get_hardcore_enabled(client);
 		break;
 	default:
-		ERROR_LOG(Log::Achievements, "Unsupported raintegration event %u\n", event->type);
+		ERROR_LOG(Log::Achievements, "Unsupported RAIntegration event %u\n", event->type);
 		break;
 	}
 }
@@ -576,7 +567,7 @@ static void load_integration_callback(int result, const char *error_message, rc_
 	case RC_OK:
 	{
 		// DLL was loaded correctly.
-		g_OSD.Show(OSDType::MESSAGE_SUCCESS, ac->T("RAIntegration DLL loaded."));
+		g_OSD.Show(OSDType::MESSAGE_SUCCESS, ApplySafeSubstitutions(ac->T("%1 loaded."), RAINTEGRATION_FILENAME));
 
 		rc_client_raintegration_set_console_id(g_rcClient, RC_CONSOLE_PSP);
 		rc_client_raintegration_set_event_handler(g_rcClient, &raintegration_event_handler);
@@ -591,11 +582,11 @@ static void load_integration_callback(int result, const char *error_message, rc_
 	}
 	case RC_MISSING_VALUE:
 		// This is fine, proceeding to login.
-		g_OSD.Show(OSDType::MESSAGE_WARNING, ac->T("RAIntegration is enabled, but RAIntegration-x64.dll was not found."));
+		g_OSD.Show(OSDType::MESSAGE_WARNING, ac->T("RAIntegration is enabled, but %1 was not found."));
 		break;
 	case RC_ABORTED:
-		// This is fine, proceeding to login.
-		g_OSD.Show(OSDType::MESSAGE_WARNING, ac->T("Wrong version of RAIntegration-x64.dll?"));
+		// This is fine(-ish), proceeding to login.
+		g_OSD.Show(OSDType::MESSAGE_WARNING, ApplySafeSubstitutions("Wrong version of %1?", RAINTEGRATION_FILENAME));
 		break;
 	default:
 		g_OSD.Show(OSDType::MESSAGE_ERROR, StringFromFormat("RAIntegration init failed: %s", error_message));

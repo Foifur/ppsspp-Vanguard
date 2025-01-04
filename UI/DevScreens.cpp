@@ -62,7 +62,7 @@
 #include "Core/MIPS/JitCommon/JitCommon.h"
 #include "Core/MIPS/JitCommon/JitState.h"
 #include "GPU/Debugger/Record.h"
-#include "GPU/GPUInterface.h"
+#include "GPU/GPUCommon.h"
 #include "GPU/GPUState.h"
 #include "UI/MiscScreens.h"
 #include "UI/DevScreens.h"
@@ -124,6 +124,10 @@ void DevMenuScreen::CreatePopupContents(UI::ViewGroup *parent) {
 	items->Add(new Choice(dev->T("Log View")))->OnClick.Handle(this, &DevMenuScreen::OnLogView);
 #endif
 	items->Add(new Choice(dev->T("Logging Channels")))->OnClick.Handle(this, &DevMenuScreen::OnLogConfig);
+	items->Add(new Choice(dev->T("Debugger")))->OnClick.Add([](UI::EventParams &e) {
+		g_Config.bShowImDebugger = !g_Config.bShowImDebugger;
+		return UI::EVENT_DONE;
+	});
 	items->Add(new Choice(sy->T("Developer Tools")))->OnClick.Handle(this, &DevMenuScreen::OnDeveloperTools);
 
 	// Debug overlay
@@ -149,7 +153,7 @@ void DevMenuScreen::CreatePopupContents(UI::ViewGroup *parent) {
 	});
 
 	items->Add(new Choice(dev->T("Create frame dump")))->OnClick.Add([](UI::EventParams &e) {
-		GPURecord::RecordNextFrame([](const Path &dumpPath) {
+		gpuDebug->GetRecorder()->RecordNextFrame([](const Path &dumpPath) {
 			NOTICE_LOG(Log::System, "Frame dump created at '%s'", dumpPath.c_str());
 			if (System_GetPropertyBool(SYSPROP_CAN_SHOW_FILE)) {
 				System_ShowFileInFolder(dumpPath);
@@ -171,10 +175,7 @@ void DevMenuScreen::CreatePopupContents(UI::ViewGroup *parent) {
 	scroll->Add(items);
 	parent->Add(scroll);
 
-	RingbufferLogListener *ring = LogManager::GetInstance()->GetRingbufferListener();
-	if (ring) {
-		ring->SetEnabled(true);
-	}
+	g_logManager.EnableOutput(LogOutput::RingBuffer);
 }
 
 UI::EventReturn DevMenuScreen::OnResetLimitedLogging(UI::EventParams &e) {
@@ -232,7 +233,7 @@ void GPIGPOScreen::CreatePopupContents(UI::ViewGroup *parent) {
 
 void LogScreen::UpdateLog() {
 	using namespace UI;
-	RingbufferLogListener *ring = LogManager::GetInstance()->GetRingbufferListener();
+	const RingbufferLog *ring = g_logManager.GetRingbuffer();
 	if (!ring)
 		return;
 	vert_->Clear();
@@ -315,8 +316,6 @@ void LogConfigScreen::CreateViews() {
 
 	vert->Add(new ItemHeader(dev->T("Logging Channels")));
 
-	LogManager *logMan = LogManager::GetInstance();
-
 	int cellSize = 400;
 
 	UI::GridLayoutSettings gridsettings(cellSize, 64, 5);
@@ -325,37 +324,34 @@ void LogConfigScreen::CreateViews() {
 
 	for (int i = 0; i < LogManager::GetNumChannels(); i++) {
 		Log type = (Log)i;
-		LogChannel *chan = logMan->GetLogChannel(type);
+		LogChannel *chan = g_logManager.GetLogChannel(type);
 		LinearLayout *row = new LinearLayout(ORIENT_HORIZONTAL, new LinearLayoutParams(cellSize - 50, WRAP_CONTENT));
 		row->SetSpacing(0);
 		row->Add(new CheckBox(&chan->enabled, "", "", new LinearLayoutParams(50, WRAP_CONTENT)));
-		row->Add(new PopupMultiChoice((int *)&chan->level, chan->m_shortName, logLevelList, 1, 6, I18NCat::NONE, screenManager(), new LinearLayoutParams(1.0)));
+		row->Add(new PopupMultiChoice((int *)&chan->level, LogManager::GetLogTypeName(type), logLevelList, 1, 6, I18NCat::NONE, screenManager(), new LinearLayoutParams(1.0)));
 		grid->Add(row);
 	}
 }
 
 UI::EventReturn LogConfigScreen::OnToggleAll(UI::EventParams &e) {
-	LogManager *logMan = LogManager::GetInstance();
 	for (int i = 0; i < LogManager::GetNumChannels(); i++) {
-		LogChannel *chan = logMan->GetLogChannel((Log)i);
+		LogChannel *chan = g_logManager.GetLogChannel((Log)i);
 		chan->enabled = !chan->enabled;
 	}
 	return UI::EVENT_DONE;
 }
 
 UI::EventReturn LogConfigScreen::OnEnableAll(UI::EventParams &e) {
-	LogManager *logMan = LogManager::GetInstance();
 	for (int i = 0; i < LogManager::GetNumChannels(); i++) {
-		LogChannel *chan = logMan->GetLogChannel((Log)i);
+		LogChannel *chan = g_logManager.GetLogChannel((Log)i);
 		chan->enabled = true;
 	}
 	return UI::EVENT_DONE;
 }
 
 UI::EventReturn LogConfigScreen::OnDisableAll(UI::EventParams &e) {
-	LogManager *logMan = LogManager::GetInstance();
 	for (int i = 0; i < LogManager::GetNumChannels(); i++) {
-		LogChannel *chan = logMan->GetLogChannel((Log)i);
+		LogChannel *chan = g_logManager.GetLogChannel((Log)i);
 		chan->enabled = false;
 	}
 	return UI::EVENT_DONE;
@@ -384,17 +380,18 @@ LogLevelScreen::LogLevelScreen(std::string_view title) : ListPopupScreen(title) 
 		list.push_back(logLevelList[i]);
 	}
 	adaptor_ = UI::StringVectorListAdaptor(list, -1);
+
+	// CreateViews takes care of, well, that.
 }
 
 void LogLevelScreen::OnCompleted(DialogResult result) {
 	if (result != DR_OK)
 		return;
 	int selected = listView_->GetSelected();
-	LogManager *logMan = LogManager::GetInstance();
 	
 	for (int i = 0; i < LogManager::GetNumChannels(); ++i) {
 		Log type = (Log)i;
-		LogChannel *chan = logMan->GetLogChannel(type);
+		LogChannel *chan = g_logManager.GetLogChannel(type);
 		if (chan->enabled)
 			chan->level = (LogLevel)(selected + 1);
 	}
@@ -1147,8 +1144,8 @@ void TouchTestScreen::touch(const TouchInput &touch) {
 				found = true;
 			}
 		}
-		if (!found) {
-			WARN_LOG(Log::System, "Move without touch down: %d", touch.id);
+		if (!found && touch.buttons) {
+			WARN_LOG(Log::System, "Move with buttons %d without touch down: %d", touch.buttons, touch.id);
 		}
 	}
 	if (touch.flags & TOUCH_UP) {

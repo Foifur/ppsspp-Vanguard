@@ -18,6 +18,7 @@
 #include "ppsspp_config.h"
 
 #include <algorithm>
+
 #include <png.h>
 #include "ext/jpge/jpge.h"
 
@@ -26,13 +27,11 @@
 #include "Common/File/Path.h"
 #include "Common/Log.h"
 #include "Common/System/Display.h"
-#include "Core/Config.h"
 #include "Core/Screenshot.h"
-#include "Core/Core.h"
+#include "Core/System.h"
 #include "GPU/Common/GPUDebugInterface.h"
 #include "GPU/Common/FramebufferManagerCommon.h"
-#include "GPU/GPUInterface.h"
-#include "GPU/GPUState.h"
+#include "GPU/GPUCommon.h"
 
 // This is used to make non-ASCII paths work for filename.
 // Technically only needed on Windows.
@@ -346,7 +345,7 @@ bool TakeGameScreenshot(Draw::DrawContext *draw, const Path &filename, Screensho
 	} else if (g_display.rotation != DisplayRotation::ROTATE_0) {
 		_dbg_assert_(draw);
 		GPUDebugBuffer temp;
-		success = ::GetOutputFramebuffer(draw, buf);
+		success = ::GetOutputFramebuffer(draw, temp);
 		if (success) {
 			buf = ApplyRotation(temp, g_display.rotation);
 		}

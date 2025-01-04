@@ -140,7 +140,7 @@ public:
 	static const char *GetStaticTypeName() { return "CallBack"; }
 
 	void GetQuickInfo(char *ptr, int size) override {
-		sprintf(ptr, "thread=%i, argument= %08x",
+		snprintf(ptr, size, "thread=%i, argument= %08x",
 			//hackAddress,
 			nc.threadId,
 			nc.commonArgument);
@@ -372,13 +372,13 @@ public:
 
 class PSPThread : public KernelObject {
 public:
-	PSPThread() : debug(currentMIPS, context) {}
+	PSPThread() : debug(context) {}
 
 	const char *GetName() override { return nt.name; }
 	const char *GetTypeName() override { return GetStaticTypeName(); }
 	static const char *GetStaticTypeName() { return "Thread"; }
 	void GetQuickInfo(char *ptr, int size) override {
-		sprintf(ptr, "pc= %08x sp= %08x %s %s %s %s %s %s (wt=%i wid=%i wv= %08x )",
+		snprintf(ptr, size, "pc= %08x sp= %08x %s %s %s %s %s %s (wt=%i wid=%i wv= %08x )",
 			context.pc, context.r[MIPS_REG_SP],
 			(nt.status & THREADSTATUS_RUNNING) ? "RUN" : "", 
 			(nt.status & THREADSTATUS_READY) ? "READY" : "", 
@@ -1699,7 +1699,7 @@ static void __ReportThreadQueueEmpty() {
 		idleThread0->GetQuickInfo(idleDescription0, sizeof(idleDescription0));
 		idleStatus0 = idleThread0->nt.status;
 	} else {
-		sprintf(idleDescription0, "DELETED");
+		truncate_cpy(idleDescription0, "DELETED");
 	}
 
 	char idleDescription1[256];
@@ -1708,7 +1708,7 @@ static void __ReportThreadQueueEmpty() {
 		idleThread1->GetQuickInfo(idleDescription1, sizeof(idleDescription1));
 		idleStatus1 = idleThread1->nt.status;
 	} else {
-		sprintf(idleDescription1, "DELETED");
+		truncate_cpy(idleDescription1, "DELETED");
 	}
 
 	ERROR_LOG_REPORT_ONCE(threadqueueempty, Log::sceKernel, "Failed to reschedule: out of threads on queue (%d, %d)", idleStatus0, idleStatus1);
@@ -3566,6 +3566,7 @@ std::vector<DebugThreadInfo> GetThreadsInfo() {
 		info.stackSize = (u32)t->nt.stackSize;
 		info.priority = t->nt.currentPriority;
 		info.waitType = (WaitType)(u32)t->nt.waitType;
+		info.waitID = t->nt.waitID;
 		info.isCurrent = uid == currentThread;
 		if (info.isCurrent)
 			info.curPC = currentMIPS->pc;

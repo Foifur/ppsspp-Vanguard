@@ -16,15 +16,14 @@
 // https://github.com/hrydgard/ppsspp and http://www.ppsspp.org/.
 
 #include "ppsspp_config.h"
+
 #include <algorithm>
 #include <map>
 #include <unordered_map>
 
 #include "Common/CommonTypes.h"
-#include "Common/Data/Convert/SmallDataConvert.h"
 #include "Common/Log.h"
 #include "Common/Swap.h"
-#include "Core/Config.h"
 #include "Core/System.h"
 #include "Core/Debugger/Breakpoints.h"
 #include "Core/Debugger/MemBlockInfo.h"
@@ -39,12 +38,8 @@
 
 #include "GPU/Math3D.h"
 #include "GPU/GPU.h"
-#include "GPU/GPUInterface.h"
-#include "GPU/GPUState.h"
-
-#if PPSSPP_ARCH(X86) || PPSSPP_ARCH(AMD64)
-#include <emmintrin.h>
-#endif
+#include "GPU/GPUCommon.h"
+#include "Common/Math/SIMDHeaders.h"
 
 enum class GPUReplacementSkip {
 	MEMSET = 1,
@@ -1773,12 +1768,12 @@ bool CanReplaceJalTo(u32 dest, const ReplacementTableEntry **entry, u32 *funcSiz
 	// Make sure we don't replace if there are any breakpoints inside.
 	*funcSize = g_symbolMap->GetFunctionSize(dest);
 	if (*funcSize == SymbolMap::INVALID_ADDRESS) {
-		if (CBreakPoints::IsAddressBreakPoint(dest)) {
+		if (g_breakpoints.IsAddressBreakPoint(dest)) {
 			return false;
 		}
 		*funcSize = (u32)sizeof(u32);
 	} else {
-		if (CBreakPoints::RangeContainsBreakPoint(dest, *funcSize)) {
+		if (g_breakpoints.RangeContainsBreakPoint(dest, *funcSize)) {
 			return false;
 		}
 	}

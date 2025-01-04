@@ -15,9 +15,6 @@
 // Official git repository and contact information can be found at
 // https://github.com/hrydgard/ppsspp and http://www.ppsspp.org/.
 
-#include <algorithm>
-#include <set>
-
 #include "Common/Serialize/Serializer.h"
 #include "Common/Serialize/SerializeFuncs.h"
 #include "Common/Serialize/SerializeMap.h"
@@ -606,20 +603,18 @@ int MetaFileSystem::ReadEntireFile(const std::string &filename, std::vector<u8> 
 	return 0;
 }
 
-u64 MetaFileSystem::FreeSpace(const std::string &path)
-{
+u64 MetaFileSystem::FreeDiskSpace(const std::string &path) {
 	std::lock_guard<std::recursive_mutex> guard(lock);
 	std::string of;
 	IFileSystem *system;
 	int error = MapFilePath(path, of, &system);
 	if (error == 0)
-		return system->FreeSpace(of);
+		return system->FreeDiskSpace(of);
 	else
 		return 0;
 }
 
-void MetaFileSystem::DoState(PointerWrap &p)
-{
+void MetaFileSystem::DoState(PointerWrap &p) {
 	std::lock_guard<std::recursive_mutex> guard(lock);
 
 	auto s = p.Section("MetaFileSystem", 1);
@@ -634,8 +629,7 @@ void MetaFileSystem::DoState(PointerWrap &p)
 	u32 n = (u32) fileSystems.size();
 	Do(p, n);
 	bool skipPfat0 = false;
-	if (n != (u32) fileSystems.size())
-	{
+	if (n != (u32) fileSystems.size()) {
 		if (n == (u32) fileSystems.size() - 1) {
 			skipPfat0 = true;
 		} else {
@@ -684,4 +678,10 @@ int64_t MetaFileSystem::ComputeRecursiveDirectorySize(const std::string &filenam
 	} else {
 		return false;
 	}
+}
+
+bool MetaFileSystem::ComputeRecursiveDirSizeIfFast(const std::string &path, int64_t *size) {
+	// Shouldn't be called. Can't recurse MetaFileSystem.
+	_dbg_assert_(false);
+	return false;
 }

@@ -42,14 +42,12 @@
 #include "Common/File/FileUtil.h"
 #include "Common/TimeUtil.h"
 #include "Core/Config.h"
-#include "Core/System.h"
 #include "GPU/Math3D.h"
 #include "GPU/GPUState.h"
 #include "GPU/ge_constants.h"
 #include "GPU/Common/ShaderUniforms.h"
 #include "GPU/GLES/ShaderManagerGLES.h"
 #include "GPU/GLES/DrawEngineGLES.h"
-#include "GPU/GLES/FramebufferManagerGLES.h"
 
 using namespace Lin;
 
@@ -975,7 +973,7 @@ enum class CacheDetectFlags {
 };
 
 #define CACHE_HEADER_MAGIC 0x83277592
-#define CACHE_VERSION 36
+#define CACHE_VERSION 37
 
 struct CacheHeader {
 	uint32_t magic;
@@ -1087,8 +1085,6 @@ bool ShaderManagerGLES::LoadCache(File::IOFile &f) {
 	if (pending.Done()) {
 		return true;
 	}
-
-	PSP_SetLoading("Compiling shaders...");
 
 	double start = time_now_d();
 

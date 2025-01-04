@@ -6,6 +6,7 @@
 #include "Common/TimeUtil.h"
 
 #include "android/jni/app-android.h"
+#include "Common/Thread/ThreadUtil.h"
 
 #if PPSSPP_PLATFORM(ANDROID) && !defined(__LIBRETRO__)
 
@@ -69,6 +70,13 @@ int Android_OpenContentUriFd(std::string_view filename, Android_OpenContentUriMo
 	if (!g_nativeActivity) {
 		return -1;
 	}
+
+	/*
+	// Should breakpoint here to try to find and move as many of these off the EmuThread as possible
+	if (!strcmp(GetCurrentThreadName(), "EmuThread")) {
+		WARN_LOG(Log::IO, "Content URI opened on EmuThread: %.*s", (int)filename.size(), filename.data());
+	}
+	*/
 
 	std::string fname(filename);
 	// PPSSPP adds an ending slash to directories before looking them up.
@@ -214,17 +222,17 @@ bool Android_FileExists(const std::string &fileUri) {
 	return exists;
 }
 
-std::vector<File::FileInfo> Android_ListContentUri(const std::string &path, bool *exists) {
+std::vector<File::FileInfo> Android_ListContentUri(const std::string &uri, const std::string &prefix, bool *exists) {
 	if (!g_nativeActivity) {
 		*exists = false;
-		return std::vector<File::FileInfo>();
+		return {};
 	}
 	auto env = getEnv();
 	*exists = true;
 
 	double start = time_now_d();
 
-	jstring param = env->NewStringUTF(path.c_str());
+	jstring param = env->NewStringUTF(uri.c_str());
 	jobject retval = env->CallObjectMethod(g_nativeActivity, listContentUriDir, param);
 
 	jobjectArray fileList = (jobjectArray)retval;
@@ -237,11 +245,12 @@ std::vector<File::FileInfo> Android_ListContentUri(const std::string &path, bool
 			std::string line = charArray;
 			File::FileInfo info{};
 			if (line == "X") {
-				// Indicates an exception thrown, path doesn't exist.
+				// Indicates an exception thrown, uri doesn't exist.
 				*exists = false;
 			} else if (ParseFileInfo(line, &info)) {
 				// We can just reconstruct the URI.
-				info.fullName = Path(path) / info.name;
+				info.fullName = Path(uri) / info.name;
+				// INFO_LOG(Log::FileSystem, "%s", info.name.c_str());
 				items.push_back(info);
 			}
 		}
@@ -253,7 +262,7 @@ std::vector<File::FileInfo> Android_ListContentUri(const std::string &path, bool
 	double elapsed = time_now_d() - start;
 	double threshold = 0.1;
 	if (elapsed >= threshold) {
-		INFO_LOG(Log::FileSystem, "Listing directory on content URI '%s' took %0.3f s (%d files, log threshold = %0.3f)", path.c_str(), elapsed, (int)items.size(), threshold);
+		INFO_LOG(Log::FileSystem, "Listing directory on content URI '%s' took %0.3f s (%d files, log threshold = %0.3f)", uri.c_str(), elapsed, (int)items.size(), threshold);
 	}
 	return items;
 }

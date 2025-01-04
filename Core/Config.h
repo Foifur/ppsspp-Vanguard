@@ -70,11 +70,13 @@ public:
 	bool bFirstRun;
 	bool bGameSpecific = false;
 	bool bUpdatedInstanceCounter = false;
+	bool bBrowse;  // show a file browser on startup. TODO: Does anyone use this?
 
 	int iRunCount; // To be used to for example check for updates every 10 runs and things like that.
 
+	// Debugger
 	bool bAutoRun;  // start immediately
-	bool bBrowse; // when opening the emulator, immediately show a file browser
+	bool bBreakOnFrameTimeout;  // not saved
 
 	// General
 	bool bScreenshotsAsPNG;
@@ -145,12 +147,12 @@ public:
 
 	std::string sIgnoreCompatSettings;
 
-	bool bDiscordPresence;  // Enables setting the Discord presence to the current game (or menu)
+	bool bDiscordRichPresence;  // Enables setting the Discord presence to the current game (or menu)
 
 	// GFX
 	int iGPUBackend;
 	std::string sCustomDriver;
-	std::string sFailedGPUBackends;
+	std::string sFailedGPUBackends;  // NOT stored in ppsspp.ini anymore!
 	std::string sDisabledGPUBackends;
 	// We have separate device parameters for each backend so it doesn't get erased if you switch backends.
 	// If not set, will use the "best" device.
@@ -172,6 +174,7 @@ public:
 	// Speedhacks (more will be moved here):
 	bool bSkipBufferEffects;
 	bool bDisableRangeCulling;
+	int iDepthRasterMode;
 
 	int iTexFiltering; // 1 = auto , 2 = nearest , 3 = linear , 4 = auto max quality
 	bool bSmart2DTexFiltering;
@@ -189,6 +192,8 @@ public:
 	bool bSustainedPerformanceMode;  // Android: Slows clocks down to avoid overheating/speed fluctuations.
 	bool bIgnoreScreenInsets;  // Android: Center screen disregarding insets if this is enabled.
 	bool bVSync;
+
+	bool bShowImDebugger;
 
 	int iFrameSkip;
 	int iFrameSkipType;
@@ -280,7 +285,7 @@ public:
 	bool bExtraAudioBuffering;  // For bluetooth
 	std::string sAudioDevice;
 	bool bAutoAudioDevice;
-	bool bUseNewAtrac;
+	bool bUseExperimentalAtrac;
 
 	// iOS only for now
 	bool bAudioMixWithOthers;
@@ -583,11 +588,11 @@ public:
 	bool loadGameConfig(const std::string &game_id, const std::string &title);
 	bool saveGameConfig(const std::string &pGameId, const std::string &title);
 	void unloadGameConfig();
-	Path getGameConfigFile(const std::string &gameId);
+	Path getGameConfigFile(const std::string &gameId, bool *exists);
 	bool hasGameConfig(const std::string &game_id);
 
 	void SetSearchPath(const Path &path);
-	const Path FindConfigFile(const std::string &baseFilename);
+	const Path FindConfigFile(const std::string &baseFilename, bool *exists);
 
 	void UpdateIniLocation(const char *iniFileName = nullptr, const char *controllerIniFilename = nullptr);
 

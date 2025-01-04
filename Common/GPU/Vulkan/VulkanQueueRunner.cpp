@@ -3,7 +3,6 @@
 #include "Common/GPU/DataFormat.h"
 #include "Common/GPU/Vulkan/VulkanQueueRunner.h"
 #include "Common/GPU/Vulkan/VulkanRenderManager.h"
-#include "Common/VR/PPSSPPVR.h"
 #include "Common/Log.h"
 #include "Common/TimeUtil.h"
 
@@ -1061,17 +1060,21 @@ void VulkanQueueRunner::PerformRenderPass(const VKRStep &step, VkCommandBuffer c
 						"expected %d sample count, got %d", fbSampleCount, graphicsPipeline->SampleCount());
 				}
 
-				if (!graphicsPipeline->pipeline[(size_t)rpType]) {
-					// NOTE: If render steps got merged, it can happen that, as they ended during recording,
-					// they didn't know their final render pass type so they created the wrong pipelines in EndCurRenderStep().
-					// Unfortunately I don't know if we can fix it in any more sensible place than here.
-					// Maybe a middle pass. But let's try to just block and compile here for now, this doesn't
-					// happen all that much.
-					graphicsPipeline->pipeline[(size_t)rpType] = Promise<VkPipeline>::CreateEmpty();
-					graphicsPipeline->Create(vulkan_, renderPass->Get(vulkan_, rpType, fbSampleCount), rpType, fbSampleCount, time_now_d(), -1);
-				}
+				VkPipeline pipeline;
 
-				VkPipeline pipeline = graphicsPipeline->pipeline[(size_t)rpType]->BlockUntilReady();
+				{
+					std::lock_guard<std::mutex> lock(graphicsPipeline->mutex_);
+					if (!graphicsPipeline->pipeline[(size_t)rpType]) {
+						// NOTE: If render steps got merged, it can happen that, as they ended during recording,
+						// they didn't know their final render pass type so they created the wrong pipelines in EndCurRenderStep().
+						// Unfortunately I don't know if we can fix it in any more sensible place than here.
+						// Maybe a middle pass. But let's try to just block and compile here for now, this doesn't
+						// happen all that much.
+						graphicsPipeline->pipeline[(size_t)rpType] = Promise<VkPipeline>::CreateEmpty();
+						graphicsPipeline->Create(vulkan_, renderPass->Get(vulkan_, rpType, fbSampleCount), rpType, fbSampleCount, time_now_d(), -1);
+					}
+					pipeline = graphicsPipeline->pipeline[(size_t)rpType]->BlockUntilReady();
+				}
 
 				if (pipeline != VK_NULL_HANDLE) {
 					vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
@@ -1323,12 +1326,7 @@ VKRRenderPass *VulkanQueueRunner::PerformBindFramebufferAsRenderTarget(const VKR
 			VKRRenderPassStoreAction::STORE, VKRRenderPassStoreAction::DONT_CARE, VKRRenderPassStoreAction::DONT_CARE,
 		};
 		renderPass = GetRenderPass(key);
-
-		if (IsVREnabled()) {
-			framebuf = (VkFramebuffer)BindVRFramebuffer();
-		} else {
-			framebuf = backbuffer_;
-		}
+		framebuf = backbuffer_;
 
 		// Raw, rotated backbuffer size.
 		w = vulkan_->GetBackbufferWidth();

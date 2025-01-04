@@ -21,7 +21,7 @@
 #include <cstring>
 #include <cstdint>
 
-class GPUInterface;
+class GPUCommon;
 class GPUDebugInterface;
 class GraphicsContext;
 
@@ -91,6 +91,7 @@ struct GPUStatistics {
 		numPlaneUpdates = 0;
 		numTexturesDecoded = 0;
 		numFramebufferEvaluations = 0;
+		numFBOsCreated = 0;
 		numBlockingReadbacks = 0;
 		numReadbacks = 0;
 		numUploads = 0;
@@ -105,7 +106,18 @@ struct GPUStatistics {
 		numBlockTransfers = 0;
 		numReplacerTrackedTex = 0;
 		numCachedReplacedTextures = 0;
+		numClutTextures = 0;
 		msProcessingDisplayLists = 0;
+		msPrepareDepth = 0.0;
+		msCullDepth = 0.0;
+		msRasterizeDepth = 0.0;
+		msRasterTimeAvailable = 0.0;
+		numDepthRasterPrims = 0;
+		numDepthRasterEarlySize = 0;
+		numDepthRasterNoPixels = 0;
+		numDepthRasterTooSmall = 0;
+		numDepthRasterZCulled = 0;
+		numDepthEarlyBoxCulled = 0;
 		vertexGPUCycles = 0;
 		otherGPUCycles = 0;
 	}
@@ -128,6 +140,7 @@ struct GPUStatistics {
 	int numTextureDataBytesHashed;
 	int numTexturesDecoded;
 	int numFramebufferEvaluations;
+	int numFBOsCreated;
 	int numBlockingReadbacks;
 	int numReadbacks;
 	int numUploads;
@@ -142,16 +155,26 @@ struct GPUStatistics {
 	int numBlockTransfers;
 	int numReplacerTrackedTex;
 	int numCachedReplacedTextures;
+	int numClutTextures;
 	double msProcessingDisplayLists;
+	double msPrepareDepth;
+	double msCullDepth;
+	double msRasterizeDepth;
+	double msRasterTimeAvailable;
 	int vertexGPUCycles;
 	int otherGPUCycles;
-
+	int numDepthRasterPrims;
+	int numDepthRasterEarlySize;
+	int numDepthRasterNoPixels;
+	int numDepthRasterTooSmall;
+	int numDepthRasterZCulled;
+	int numDepthEarlyBoxCulled;
 	// Flip count. Doesn't really belong here.
 	int numFlips;
 };
 
 extern GPUStatistics gpuStats;
-extern GPUInterface *gpu;
+extern GPUCommon *gpu;
 extern GPUDebugInterface *gpuDebug;
 
 namespace Draw {

@@ -72,6 +72,9 @@ void Event::Add(std::function<EventReturn(EventParams&)> func) {
 
 // Call this from input thread or whatever, it doesn't matter
 void Event::Trigger(EventParams &e) {
+	if (handlers_.empty()) {
+		return;
+	}
 	EventTriggered(this, e);
 }
 
@@ -243,6 +246,11 @@ bool Clickable::Touch(const TouchInput &input) {
 	if (!IsEnabled()) {
 		dragging_ = false;
 		down_ = false;
+		return contains;
+	}
+
+	// Ignore buttons other than the left one.
+	if ((input.flags & TOUCH_MOUSE) && (input.buttons & 1) == 0) {
 		return contains;
 	}
 
@@ -602,8 +610,10 @@ ItemHeader::ItemHeader(std::string_view text, LayoutParams *layoutParams)
 
 void ItemHeader::Draw(UIContext &dc) {
 	dc.SetFontStyle(large_ ? dc.theme->uiFont : dc.theme->uiFontSmall);
-	dc.DrawText(text_, bounds_.x + 4, bounds_.centerY(), dc.theme->headerStyle.fgColor, ALIGN_LEFT | ALIGN_VCENTER);
-	dc.Draw()->DrawImageCenterTexel(dc.theme->whiteImage, bounds_.x, bounds_.y2()-2, bounds_.x2(), bounds_.y2(), dc.theme->headerStyle.fgColor);
+
+	const UI::Style &style = popupStyle_ ? dc.theme->popupStyle : dc.theme->headerStyle;
+	dc.DrawText(text_, bounds_.x + 4, bounds_.centerY(), style.fgColor, ALIGN_LEFT | ALIGN_VCENTER);
+	dc.Draw()->DrawImageCenterTexel(dc.theme->whiteImage, bounds_.x, bounds_.y2()-2, bounds_.x2(), bounds_.y2(), style.fgColor);
 }
 
 void ItemHeader::GetContentDimensionsBySpec(const UIContext &dc, MeasureSpec horiz, MeasureSpec vert, float &w, float &h) const {
@@ -641,10 +651,10 @@ void CollapsibleHeader::Draw(UIContext &dc) {
 	float xoff = 37.0f;
 
 	dc.SetFontStyle(dc.theme->uiFontSmall);
-	dc.DrawText(text_, bounds_.x + 4 + xoff, bounds_.centerY(), dc.theme->headerStyle.fgColor, ALIGN_LEFT | ALIGN_VCENTER);
-	dc.Draw()->DrawImageCenterTexel(dc.theme->whiteImage, bounds_.x, bounds_.y2() - 2, bounds_.x2(), bounds_.y2(), dc.theme->headerStyle.fgColor);
+	dc.DrawText(text_, bounds_.x + 4 + xoff, bounds_.centerY(), style.fgColor, ALIGN_LEFT | ALIGN_VCENTER);
+	dc.Draw()->DrawImageCenterTexel(dc.theme->whiteImage, bounds_.x, bounds_.y2() - 2, bounds_.x2(), bounds_.y2(), style.fgColor);
 	if (hasSubItems_) {
-		dc.Draw()->DrawImageRotated(ImageID("I_ARROW"), bounds_.x + 20.0f, bounds_.y + 20.0f, 1.0f, *toggle_ ? -M_PI / 2 : M_PI);
+		dc.Draw()->DrawImageRotated(ImageID("I_ARROW"), bounds_.x + 20.0f, bounds_.y + 20.0f, 1.0f, *toggle_ ? -M_PI / 2 : M_PI, style.fgColor);
 	}
 }
 
@@ -1403,6 +1413,7 @@ bool TriggerButton::Touch(const TouchInput &input) {
 			down_ |= 1 << input.id;
 		}
 	}
+
 	if (input.flags & TOUCH_MOVE) {
 		if (contains)
 			down_ |= 1 << input.id;

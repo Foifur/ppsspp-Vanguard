@@ -1,6 +1,6 @@
-#include <algorithm>
-#include <ctype.h>
+#include <cctype>
 #include <set>
+#include <algorithm>  // for sort
 #include <cstdio>
 #include <cstring>
 
@@ -44,7 +44,7 @@ ZipFileReader *ZipFileReader::Create(const Path &zipFile, const char *inZipPath,
 	if (!path.empty() && path.back() != '/') {
 		path.push_back('/');
 	}
-	return new ZipFileReader(zip_file, path);
+	return new ZipFileReader(zip_file, zipFile, path);
 }
 
 ZipFileReader::~ZipFileReader() {
@@ -229,8 +229,7 @@ public:
 };
 
 VFSFileReference *ZipFileReader::GetFile(const char *path) {
-	std::lock_guard<std::mutex> guard(lock_);
-	int zi = zip_name_locate(zip_file_, path, ZIP_FL_NOCASE);
+	int zi = zip_name_locate(zip_file_, path, ZIP_FL_NOCASE);  // this is EXPENSIVE
 	if (zi < 0) {
 		// Not found.
 		return nullptr;
@@ -244,7 +243,6 @@ bool ZipFileReader::GetFileInfo(VFSFileReference *vfsReference, File::FileInfo *
 	ZipFileReaderFileReference *reference = (ZipFileReaderFileReference *)vfsReference;
 	// If you crash here, you called this while having the lock held by having the file open.
 	// Don't do that, check the info before you open the file.
-	std::lock_guard<std::mutex> guard(lock_);
 	zip_stat_t zstat;
 	if (zip_stat_index(zip_file_, reference->zi, 0, &zstat) != 0)
 		return false;
@@ -290,22 +288,26 @@ VFSOpenFile *ZipFileReader::OpenFileForRead(VFSFileReference *vfsReference, size
 }
 
 void ZipFileReader::Rewind(VFSOpenFile *vfsOpenFile) {
-	ZipFileReaderOpenFile *openFile = (ZipFileReaderOpenFile *)vfsOpenFile;
-	// Close and re-open.
-	zip_fclose(openFile->zf);
-	openFile->zf = zip_fopen_index(zip_file_, openFile->reference->zi, 0);
+	ZipFileReaderOpenFile *file = (ZipFileReaderOpenFile *)vfsOpenFile;
+	_assert_(file);
+	_dbg_assert_(file->zf != nullptr);
+	zip_fseek(file->zf, 0, SEEK_SET);
 }
 
 size_t ZipFileReader::Read(VFSOpenFile *vfsOpenFile, void *buffer, size_t length) {
 	ZipFileReaderOpenFile *file = (ZipFileReaderOpenFile *)vfsOpenFile;
+	_assert_(file);
+	_dbg_assert_(file->zf != nullptr);
 	return zip_fread(file->zf, buffer, length);
 }
 
 void ZipFileReader::CloseFile(VFSOpenFile *vfsOpenFile) {
 	ZipFileReaderOpenFile *file = (ZipFileReaderOpenFile *)vfsOpenFile;
+	_assert_(file);
 	_dbg_assert_(file->zf != nullptr);
 	zip_fclose(file->zf);
 	file->zf = nullptr;
+	vfsOpenFile = nullptr;
 	lock_.unlock();
 	delete file;
 }

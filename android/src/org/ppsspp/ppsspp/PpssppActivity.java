@@ -9,6 +9,7 @@ import android.os.Bundle;
 import android.os.Environment;
 import android.os.Looper;
 import android.os.ParcelFileDescriptor;
+import android.provider.MediaStore;
 import android.util.Log;
 import android.system.StructStatVfs;
 import android.system.Os;
@@ -29,7 +30,6 @@ public class PpssppActivity extends NativeActivity {
 	// Key used for debugging.
 	public static final String ARGS_EXTRA_KEY = "org.ppsspp.ppsspp.Args";
 
-	private static boolean m_hasUnsupportedABI = false;
 	private static boolean m_hasNoNativeBinary = false;
 
 	public static boolean libraryLoaded = false;
@@ -42,16 +42,12 @@ public class PpssppActivity extends NativeActivity {
 	private static final int STORAGE_ERROR_ALREADY_EXISTS = -4;
 
 	public static void CheckABIAndLoadLibrary() {
-		if (Build.CPU_ABI.equals("armeabi")) {
-			m_hasUnsupportedABI = true;
-		} else {
-			try {
-				System.loadLibrary("ppsspp_jni");
-				libraryLoaded = true;
-			} catch (UnsatisfiedLinkError e) {
-				Log.e(TAG, "LoadLibrary failed, UnsatifiedLinkError: " + e);
-				m_hasNoNativeBinary = true;
-			}
+		try {
+			System.loadLibrary("ppsspp_jni");
+			libraryLoaded = true;
+		} catch (UnsatisfiedLinkError e) {
+			Log.e(TAG, "LoadLibrary failed, UnsatifiedLinkError: " + e);
+			m_hasNoNativeBinary = true;
 		}
 	}
 
@@ -65,17 +61,13 @@ public class PpssppActivity extends NativeActivity {
 
 	@Override
 	public void onCreate(Bundle savedInstanceState) {
-		if (m_hasUnsupportedABI || m_hasNoNativeBinary) {
+		if (m_hasNoNativeBinary) {
 			new Thread() {
 				@Override
 				public void run() {
 					Looper.prepare();
 					AlertDialog.Builder builder = new AlertDialog.Builder(PpssppActivity.this);
-					if (m_hasUnsupportedABI) {
-						builder.setMessage(Build.CPU_ABI + " target is not supported.").setTitle("Error starting PPSSPP").create().show();
-					} else {
-						builder.setMessage("The native part of PPSSPP for ABI " + Build.CPU_ABI + " is missing. Try downloading an official build?").setTitle("Error starting PPSSPP").create().show();
-					}
+					builder.setMessage("The native part of PPSSPP for ABI " + Build.CPU_ABI + " is missing. Try downloading an official build?").setTitle("Error starting PPSSPP").create().show();
 					Looper.loop();
 				}
 			}.start();
@@ -170,14 +162,14 @@ public class PpssppActivity extends NativeActivity {
 		// Filter out any virtual or partial nonsense.
 		// There's a bunch of potentially-interesting flags here btw,
 		// to figure out how to set access flags better, etc.
+		// Like FLAG_SUPPORTS_WRITE etc.
 		if ((flags & (DocumentsContract.Document.FLAG_PARTIAL | DocumentsContract.Document.FLAG_VIRTUAL_DOCUMENT)) != 0) {
 			return null;
 		}
-
 		final String mimeType = c.getString(3);
 		final boolean isDirectory = mimeType.equals(DocumentsContract.Document.MIME_TYPE_DIR);
 		final String documentName = c.getString(0);
-		final long size = c.getLong(1);
+		final long size = isDirectory ? 0 : c.getLong(1);
 		final long lastModified = c.getLong(4);
 
 		String str = "F|";
@@ -246,8 +238,7 @@ public class PpssppActivity extends NativeActivity {
 	public long computeRecursiveDirectorySize(String uriString) {
 		try {
 			Uri uri = Uri.parse(uriString);
-			long totalSize = directorySizeRecursion(uri);
-			return totalSize;
+			return directorySizeRecursion(uri);
 		}
 		catch (Exception e) {
 			Log.e(TAG, "computeRecursiveSize exception: " + e);
@@ -268,6 +259,9 @@ public class PpssppActivity extends NativeActivity {
 			final Uri childrenUri = DocumentsContract.buildChildDocumentsUriUsingTree(
 					uri, DocumentsContract.getDocumentId(uri));
 			final ArrayList<String> listing = new ArrayList<>();
+
+			String selection = null;
+			String[] selectionArgs = null;
 			c = resolver.query(childrenUri, columns, null, null, null);
 			if (c == null) {
 				return new String[]{ "X" };

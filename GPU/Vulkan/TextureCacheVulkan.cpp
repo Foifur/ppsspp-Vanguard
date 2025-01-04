@@ -28,7 +28,6 @@
 #include "Common/GPU/thin3d.h"
 #include "Common/GPU/Vulkan/VulkanRenderManager.h"
 #include "Common/System/OSD.h"
-#include "Common/Data/Convert/ColorConv.h"
 #include "Common/StringUtils.h"
 #include "Common/TimeUtil.h"
 #include "Common/GPU/Vulkan/VulkanContext.h"
@@ -36,8 +35,6 @@
 #include "Common/GPU/Vulkan/VulkanMemory.h"
 
 #include "Core/Config.h"
-#include "Core/MemMap.h"
-#include "Core/System.h"
 
 #include "GPU/ge_constants.h"
 #include "GPU/GPUState.h"
@@ -652,8 +649,6 @@ void TextureCacheVulkan::BuildTexture(TexCacheEntry *const entry) {
 			}
 			// Format might be wrong in lowMemoryMode_, so don't save.
 			if (plan.saveTexture && !lowMemoryMode_) {
-				INFO_LOG(Log::G3D, "Calling NotifyTextureDecoded %08x", entry->addr);
-
 				// When hardware texture scaling is enabled, this saves the original.
 				int w = dataScaled ? mipWidth : mipUnscaledWidth;
 				int h = dataScaled ? mipHeight : mipUnscaledHeight;
@@ -768,8 +763,11 @@ void TextureCacheVulkan::LoadVulkanTextureLevel(TexCacheEntry &entry, uint8_t *w
 	if (scaleFactor > 1) {
 		u32 fmt = dstFmt;
 		// CPU scaling reads from the destination buffer so we want cached RAM.
-		uint8_t *rearrange = (uint8_t *)AllocateAlignedMemory(w * scaleFactor * h * scaleFactor * 4, 16);
-		scaler_.ScaleAlways((u32 *)rearrange, pixelData, w, h, &w, &h, scaleFactor);
+		size_t allocBytes = w * scaleFactor * h * scaleFactor * 4;
+		uint8_t *scaleBuf = (uint8_t *)AllocateAlignedMemory(allocBytes, 16);
+		_assert_msg_(scaleBuf, "Failed to allocate %d aligned bytes for texture scaler", (int)allocBytes);
+
+		scaler_.ScaleAlways((u32 *)scaleBuf, pixelData, w, h, &w, &h, scaleFactor);
 		pixelData = (u32 *)writePtr;
 
 		// We always end up at 8888.  Other parts assume this.
@@ -779,13 +777,13 @@ void TextureCacheVulkan::LoadVulkanTextureLevel(TexCacheEntry &entry, uint8_t *w
 
 		if (decPitch != rowPitch) {
 			for (int y = 0; y < h; ++y) {
-				memcpy(writePtr + rowPitch * y, rearrange + decPitch * y, w * bpp);
+				memcpy(writePtr + rowPitch * y, scaleBuf + decPitch * y, w * bpp);
 			}
 			decPitch = rowPitch;
 		} else {
-			memcpy(writePtr, rearrange, w * h * 4);
+			memcpy(writePtr, scaleBuf, w * h * 4);
 		}
-		FreeAlignedMemory(rearrange);
+		FreeAlignedMemory(scaleBuf);
 	}
 }
 
@@ -864,7 +862,7 @@ std::string TextureCacheVulkan::DebugGetSamplerString(const std::string &id, Deb
 	return samplerCache_.DebugGetSamplerString(id, stringType);
 }
 
-void *TextureCacheVulkan::GetNativeTextureView(const TexCacheEntry *entry) {
-	VkImageView view = entry->vkTex->GetImageArrayView();
+void *TextureCacheVulkan::GetNativeTextureView(const TexCacheEntry *entry, bool flat) const {
+	VkImageView view = flat ? entry->vkTex->GetImageView() : entry->vkTex->GetImageArrayView();
 	return (void *)view;
 }

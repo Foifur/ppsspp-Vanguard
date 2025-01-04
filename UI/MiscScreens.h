@@ -97,9 +97,6 @@ public:
 	const char *tag() const override { return "Prompt"; }
 
 private:
-	UI::EventReturn OnYes(UI::EventParams &e);
-	UI::EventReturn OnNo(UI::EventParams &e);
-
 	std::string message_;
 	std::string yesButtonText_;
 	std::string noButtonText_;
@@ -176,7 +173,7 @@ private:
 	UI::EventReturn OnForums(UI::EventParams &e);
 	UI::EventReturn OnDiscord(UI::EventParams &e);
 	UI::EventReturn OnShare(UI::EventParams &e);
-	UI::EventReturn OnTwitter(UI::EventParams &e);
+	UI::EventReturn OnX(UI::EventParams &e);
 
 	double startTime_ = 0.0;
 };

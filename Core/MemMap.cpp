@@ -24,24 +24,20 @@
 #include <algorithm>
 #include <mutex>
 
-#include "Common/Common.h"
-#include "Common/MemoryUtil.h"
+#include "Common/CommonTypes.h"
 #include "Common/MemArena.h"
 #include "Common/Serialize/Serializer.h"
 #include "Common/Serialize/SerializeFuncs.h"
 
+#include "Core/System.h"
 #include "Core/Core.h"
-#include "Core/Config.h"
 #include "Core/ConfigValues.h"
-#include "Core/Debugger/SymbolMap.h"
 #include "Core/Debugger/MemBlockInfo.h"
 #include "Core/HDRemaster.h"
-#include "Core/HLE/HLE.h"
 #include "Core/HLE/ReplaceTables.h"
 #include "Core/MemMap.h"
 #include "Core/MemFault.h"
 #include "Core/MIPS/MIPS.h"
-#include "Core/MIPS/JitCommon/JitBlockCache.h"
 #include "Core/MIPS/JitCommon/JitCommon.h"
 #include "Common/Thread/ParallelLoop.h"
 
@@ -158,8 +154,8 @@ static bool Memory_TryBase(u32 flags) {
 		*view.out_ptr = (u8*)g_arena.CreateView(
 			position, view.size, base + view.virtual_address);
 		if (!*view.out_ptr) {
+			ERROR_LOG(Log::MemMap, "Failed at view %d", i);
 			goto bail;
-			DEBUG_LOG(Log::MemMap, "Failed at view %d", i);
 		}
 #else
 		if (CanIgnoreView(view)) {
@@ -169,7 +165,7 @@ static bool Memory_TryBase(u32 flags) {
 			*view.out_ptr = (u8*)g_arena.CreateView(
 				position, view.size, base + (view.virtual_address & MEMVIEW32_MASK));
 			if (!*view.out_ptr) {
-				DEBUG_LOG(Log::MemMap, "Failed at view %d", i);
+				ERROR_LOG(Log::MemMap, "Failed at view %d", i);
 				goto bail;
 			}
 		}
@@ -185,11 +181,11 @@ bail:
 		if (views[i].size == 0)
 			continue;
 		SKIP(flags, views[i].flags);
-		if (*views[j].out_ptr) {
+		if (views[j].out_ptr && *views[j].out_ptr) {
 			if (!CanIgnoreView(views[j])) {
 				g_arena.ReleaseView(0, *views[j].out_ptr, views[j].size);
 			}
-			*views[j].out_ptr = NULL;
+			*views[j].out_ptr = nullptr;
 		}
 	}
 	return false;

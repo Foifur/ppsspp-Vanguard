@@ -19,7 +19,6 @@
 #include <memory>
 #include "Common/Log.h"
 #include "Common/Data/Text/I18n.h"
-#include "Common/Data/Format/ZIMLoad.h"
 #include "Common/Serialize/Serializer.h"
 #include "Common/Serialize/SerializeFuncs.h"
 #include "Common/System/OSD.h"
@@ -209,12 +208,9 @@ void SaveFileInfo::DoState(PointerWrap &p)
 
 SavedataParam::SavedataParam() { }
 
-void SavedataParam::Init()
-{
-	if (!pspFileSystem.GetFileInfo(savePath).exists)
-	{
-		pspFileSystem.MkDir(savePath);
-	}
+void SavedataParam::Init() {
+	// If the folder already exists, this is a no-op.
+	pspFileSystem.MkDir(savePath);
 	// Create a nomedia file to hide save icons form Android image viewer
 #if PPSSPP_PLATFORM(ANDROID)
 	int handle = pspFileSystem.OpenFile(savePath + ".nomedia", (FileAccess)(FILEACCESS_CREATE | FILEACCESS_WRITE), 0);
@@ -330,7 +326,7 @@ bool SavedataParam::Delete(SceUtilitySavedataParam* param, int saveId) {
 	}
 
 	// Sanity check, preventing full delete of savedata/ in MGS PW demo (!)
-	if (!strlen(param->gameName) && param->mode != SCE_UTILITY_SAVEDATA_TYPE_LISTALLDELETE) {
+	if (!strnlen(param->gameName, sizeof(param->gameName)) && param->mode != SCE_UTILITY_SAVEDATA_TYPE_LISTALLDELETE) {
 		ERROR_LOG(Log::sceUtility, "Bad param with gameName empty - cannot delete save directory");
 		return false;
 	}
@@ -459,7 +455,7 @@ int SavedataParam::Save(SceUtilitySavedataParam* param, const std::string &saveD
 		}
 	}
 
-	u8* cryptedData = 0;
+	u8* cryptedData = nullptr;
 	int cryptedSize = 0;
 	u8 cryptedHash[0x10]{};
 	// Encrypt save.
@@ -886,7 +882,7 @@ std::set<std::string> SavedataParam::GetSecureFileNames(const std::string &dirPa
 
 	std::set<std::string> secureFileNames;
 	for (const auto &entry : entries) {
-		char temp[14];
+		char temp[14]{};
 		truncate_cpy(temp, entry.filename);
 		secureFileNames.insert(temp);
 	}
@@ -1122,17 +1118,15 @@ inline std::string FmtPspTime(const ScePspDateTime &dt) {
 	return StringFromFormat("%04d-%02d-%02d %02d:%02d:%02d.%06d", dt.year, dt.month, dt.day, dt.hour, dt.minute, dt.second, dt.microsecond);
 }
 
-int SavedataParam::GetSizes(SceUtilitySavedataParam *param)
-{
+int SavedataParam::GetSizes(SceUtilitySavedataParam *param) {
 	if (!param) {
 		return SCE_UTILITY_SAVEDATA_ERROR_SIZES_NO_DATA;
 	}
 
 	int ret = 0;
-
 	if (param->msFree.IsValid())
 	{
-		const u64 freeBytes = MemoryStick_FreeSpace();
+		const u64 freeBytes = MemoryStick_FreeSpace(GetGameName(param));
 		param->msFree->clusterSize = (u32)MemoryStick_SectorSize();
 		param->msFree->freeClusters = (u32)(freeBytes / MemoryStick_SectorSize());
 		param->msFree->freeSpaceKB = (u32)(freeBytes / 0x400);
@@ -1233,6 +1227,8 @@ bool SavedataParam::GetList(SceUtilitySavedataParam *param)
 
 		std::vector<PSPFileInfo> validDir;
 		std::vector<PSPFileInfo> sfoFiles;
+
+		// TODO: Here we can filter by prefix - only the savename in param is likely to be a regex.
 		std::vector<PSPFileInfo> allDir = pspFileSystem.GetDirListing(savePath);
 
 		std::string searchString = GetGameName(param) + GetSaveName(param);
@@ -1296,7 +1292,7 @@ int SavedataParam::GetFilesList(SceUtilitySavedataParam *param, u32 requestAddr)
 		return -1;
 	}
 
-	auto &fileList = param->fileList;
+	PSPPointer<SceUtilitySavedataFileListInfo> fileList = param->fileList;
 	if (fileList->secureEntries.IsValid() && fileList->maxSecureEntries > 99) {
 		ERROR_LOG_REPORT(Log::sceUtility, "SavedataParam::GetFilesList(): too many secure entries, %d", fileList->maxSecureEntries);
 		return SCE_UTILITY_SAVEDATA_ERROR_RW_BAD_PARAMS;
@@ -1393,12 +1389,17 @@ int SavedataParam::GetFilesList(SceUtilitySavedataParam *param, u32 requestAddr)
 	}
 
 	if (GenericLogEnabled(LogLevel::LINFO, Log::sceUtility)) {
-		INFO_LOG(Log::sceUtility, "FILES: %d files listed", fileList->resultNumNormalEntries);
-		for (int i = 0; i < (int)fileList->resultNumNormalEntries; i++) {
-			const SceUtilitySavedataFileListEntry &info = fileList->systemEntries[i];
-			INFO_LOG(Log::sceUtility, "%s: mode %08x, ctime: %s, atime: %s, mtime: %s",
-				info.name, info.st_mode, FmtPspTime(info.st_ctime).c_str(), FmtPspTime(info.st_atime).c_str(), FmtPspTime(info.st_mtime).c_str());
+		INFO_LOG(Log::sceUtility, "FILES: %d files listed (+ %d system, %d secure)", fileList->resultNumNormalEntries, fileList->resultNumSystemEntries, fileList->resultNumSecureEntries);
+		if (fileList->normalEntries.IsValid()) {
+			for (int i = 0; i < (int)fileList->resultNumNormalEntries; i++) {
+				const SceUtilitySavedataFileListEntry &info = fileList->normalEntries[i];
+				INFO_LOG(Log::sceUtility, "%s: mode %08x, ctime: %s, atime: %s, mtime: %s",
+					info.name, info.st_mode, FmtPspTime(info.st_ctime).c_str(), FmtPspTime(info.st_atime).c_str(), FmtPspTime(info.st_mtime).c_str());
+			}
+		} else {
+			WARN_LOG(Log::sceUtility, "Invalid normalEntries pointer");
 		}
+		// TODO: Log system and secure entries?
 	}
 
 	NotifyMemInfo(MemBlockFlags::WRITE, fileList.ptr, sizeof(SceUtilitySavedataFileListInfo), "SavedataGetFilesList");
@@ -1422,7 +1423,7 @@ bool SavedataParam::GetSize(SceUtilitySavedataParam *param) {
 
 	if (param->sizeInfo.IsValid()) {
 		auto listing = pspFileSystem.GetDirListing(saveDir, &exists);
-		const u64 freeBytes = MemoryStick_FreeSpace();
+		const u64 freeBytes = MemoryStick_FreeSpace(GetGameName(param));
 
 		s64 overwriteBytes = 0;
 		s64 writeBytes = 0;
@@ -1514,6 +1515,11 @@ int SavedataParam::SetPspParam(SceUtilitySavedataParam *param)
 		return 0;
 	}
 
+	std::string gameName = GetGameName(param);
+	if (!gameName.empty()) {
+		MemoryStick_NotifyGameName(gameName);
+	}
+
 	if (param->mode == SCE_UTILITY_SAVEDATA_TYPE_LISTALLDELETE) {
 		Clear();
 		int realCount = 0;
@@ -1556,12 +1562,16 @@ int SavedataParam::SetPspParam(SceUtilitySavedataParam *param)
 			
 			// get and stock file info for each file
 			int realCount = 0;
+
+			// TODO: Filter away non-directories directly?
+			std::vector<PSPFileInfo> allSaves = pspFileSystem.GetDirListing(savePath);
+
+			std::string gameName = GetGameName(param);
+
 			for (int i = 0; i < saveDataListCount; i++) {
 				// "<>" means saveName can be anything...
 				if (strncmp(saveNameListData[i], "<>", ARRAY_SIZE(saveNameListData[i])) == 0) {
-					// TODO:Maybe we need a way to reorder the files?
-					auto allSaves = pspFileSystem.GetDirListing(savePath);
-					std::string gameName = GetGameName(param);
+					// TODO: Maybe we need a way to reorder the files?
 					for (auto it = allSaves.begin(); it != allSaves.end(); ++it) {
 						if (it->name.compare(0, gameName.length(), gameName) == 0) {
 							std::string saveName = it->name.substr(gameName.length());
@@ -1572,7 +1582,6 @@ int SavedataParam::SetPspParam(SceUtilitySavedataParam *param)
 							std::string fileDataPath = savePath + it->name;
 							if (it->exists) {
 								SetFileInfo(realCount, *it, saveName);
-								DEBUG_LOG(Log::sceUtility, "%s Exist", fileDataPath.c_str());
 								++realCount;
 							} else {
 								if (listEmptyFile) {
@@ -1588,13 +1597,30 @@ int SavedataParam::SetPspParam(SceUtilitySavedataParam *param)
 
 				const std::string thisSaveName = FixedToString(saveNameListData[i], ARRAY_SIZE(saveNameListData[i]));
 
-				std::string fileDataDir = savePath + GetGameName(param) + thisSaveName;
-				PSPFileInfo info = GetSaveInfo(fileDataDir);
-				if (info.exists) {
-					SetFileInfo(realCount, info, thisSaveName);
-					INFO_LOG(Log::sceUtility, "Save data exists: %s = %s", thisSaveName.c_str(), fileDataDir.c_str());
-					realCount++;
-				} else {
+				const std::string folderName = gameName + thisSaveName;
+
+				// Check if thisSaveName is in the list before processing.
+				// This is hopefully faster than doing file I/O.
+				bool found = false;
+				for (int i = 0; i < allSaves.size(); i++) {
+					if (allSaves[i].name == folderName) {
+						found = true;
+					}
+				}
+
+				const std::string fileDataDir = savePath + gameName + thisSaveName;
+				if (found) {
+					PSPFileInfo info = GetSaveInfo(fileDataDir);
+					if (info.exists) {
+						SetFileInfo(realCount, info, thisSaveName);
+						INFO_LOG(Log::sceUtility, "Save data exists: %s = %s", thisSaveName.c_str(), fileDataDir.c_str());
+						realCount++;
+					} else {
+						found = false;
+					}
+				}
+
+				if (!found) {  // NOTE: May be changed above, can't merge with the expression
 					if (listEmptyFile) {
 						ClearFileInfo(saveDataList[realCount], thisSaveName);
 						INFO_LOG(Log::sceUtility, "Listing missing save data: %s = %s", thisSaveName.c_str(), fileDataDir.c_str());
@@ -2000,7 +2026,7 @@ int SavedataParam::GetSaveCryptMode(const SceUtilitySavedataParam *param, const 
 
 bool SavedataParam::IsInSaveDataList(const std::string &saveName, int count) {
 	for(int i = 0; i < count; ++i) {
-		if(strcmp(saveDataList[i].saveName.c_str(),saveName.c_str()) == 0)
+		if (saveDataList[i].saveName == saveName)
 			return true;
 	}
 	return false;

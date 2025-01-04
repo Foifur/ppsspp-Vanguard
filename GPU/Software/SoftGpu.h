@@ -170,7 +170,7 @@ public:
 	bool GetCurrentStencilbuffer(GPUDebugBuffer &buffer) override;
 	bool GetCurrentTexture(GPUDebugBuffer &buffer, int level, bool *isFramebuffer) override;
 	bool GetCurrentClut(GPUDebugBuffer &buffer) override;
-	bool GetCurrentSimpleVertices(int count, std::vector<GPUDebugVertex> &vertices, std::vector<u16> &indices) override;
+	bool GetCurrentDrawAsDebugVertices(int count, std::vector<GPUDebugVertex> &vertices, std::vector<u16> &indices) override;
 
 	bool DescribeCodePtr(const u8 *ptr, std::string &name) override;
 
@@ -208,6 +208,9 @@ public:
 	void Execute_ImmVertexAlphaPrim(u32 op, u32 diff);
 
 	typedef void (SoftGPU::*CmdFunc)(u32 op, u32 diff);
+
+	void BeginHostFrame() override;
+	bool PresentedThisFrame() const override;
 
 protected:
 	void FastRunLoop(DisplayList &list) override;

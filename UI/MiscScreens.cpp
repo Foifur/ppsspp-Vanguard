@@ -46,7 +46,7 @@
 #include "Core/MIPS/JitCommon/JitCommon.h"
 #include "Core/HLE/sceUtility.h"
 #include "GPU/GPUState.h"
-#include "GPU/GPUInterface.h"
+#include "GPU/GPUCommon.h"
 #include "GPU/Common/PostShader.h"
 
 #include "UI/ControlMappingScreen.h"
@@ -528,26 +528,24 @@ void PromptScreen::CreateViews() {
 	root_->Add(rightColumnItems);
 
 	Choice *yesButton = rightColumnItems->Add(new Choice(yesButtonText_));
-	yesButton->OnClick.Handle(this, &PromptScreen::OnYes);
-	root_->SetDefaultFocusView(yesButton);
+	yesButton->OnClick.Add([this](UI::EventParams &e) {
+		TriggerFinish(DR_OK);
+		return UI::EVENT_DONE;
+	});
 	if (!noButtonText_.empty()) {
-		rightColumnItems->Add(new Choice(noButtonText_))->OnClick.Handle(this, &PromptScreen::OnNo);
+		Choice *noButton = rightColumnItems->Add(new Choice(noButtonText_));
+		noButton->OnClick.Add([this](UI::EventParams &e) {
+			TriggerFinish(DR_CANCEL);
+			return UI::EVENT_DONE;
+		});
+		root_->SetDefaultFocusView(noButton);
 	} else {
 		// This is an information screen, not a question.
 		// Sneak in the version of PPSSPP in the corner, for debug-reporting user screenshots.
 		std::string version = System_GetProperty(SYSPROP_BUILD_VERSION);
 		root_->Add(new TextView(version, 0, true, new AnchorLayoutParams(10.0f, NONE, NONE, 10.0f)));
+		root_->SetDefaultFocusView(yesButton);
 	}
-}
-
-UI::EventReturn PromptScreen::OnYes(UI::EventParams &e) {
-	TriggerFinish(DR_OK);
-	return UI::EVENT_DONE;
-}
-
-UI::EventReturn PromptScreen::OnNo(UI::EventParams &e) {
-	TriggerFinish(DR_CANCEL);
-	return UI::EVENT_DONE;
 }
 
 void PromptScreen::TriggerFinish(DialogResult result) {
@@ -786,7 +784,7 @@ void LogoScreen::DrawForeground(UIContext &dc) {
 	// Add some emoji for testing.
 	apiName += CodepointToUTF8(0x1F41B) + CodepointToUTF8(0x1F41C) + CodepointToUTF8(0x1F914);
 #endif
-	dc.DrawText(gr->T_cstr(apiName.c_str()), bounds.centerX(), ppsspp_org_y + 50, textColor, ALIGN_CENTER);
+	dc.DrawText(gr->T(apiName.c_str()), bounds.centerX(), ppsspp_org_y + 50, textColor, ALIGN_CENTER);
 #endif
 
 	dc.Flush();
@@ -816,7 +814,7 @@ void CreditsScreen::CreateViews() {
 	root_->Add(new Button(cr->T("Discord"), new AnchorLayoutParams(260, 64, 10, NONE, NONE, 232, false)))->OnClick.Handle(this, &CreditsScreen::OnDiscord);
 	root_->Add(new Button("www.ppsspp.org", new AnchorLayoutParams(260, 64, 10, NONE, NONE, 10, false)))->OnClick.Handle(this, &CreditsScreen::OnPPSSPPOrg);
 	root_->Add(new Button(cr->T("Privacy Policy"), new AnchorLayoutParams(260, 64, 10, NONE, NONE, 84, false)))->OnClick.Handle(this, &CreditsScreen::OnPrivacy);
-	root_->Add(new Button(cr->T("Twitter @PPSSPP_emu"), new AnchorLayoutParams(260, 64, NONE, NONE, 10, rightYOffset + 84, false)))->OnClick.Handle(this, &CreditsScreen::OnTwitter);
+	root_->Add(new Button(cr->T("X @PPSSPP_emu"), new AnchorLayoutParams(260, 64, NONE, NONE, 10, rightYOffset + 84, false)))->OnClick.Handle(this, &CreditsScreen::OnX);
 
 #if PPSSPP_PLATFORM(ANDROID) || PPSSPP_PLATFORM(IOS)
 	root_->Add(new Button(cr->T("Share PPSSPP"), new AnchorLayoutParams(260, 64, NONE, NONE, 10, rightYOffset + 158, false)))->OnClick.Handle(this, &CreditsScreen::OnShare);
@@ -837,7 +835,8 @@ UI::EventReturn CreditsScreen::OnSupport(UI::EventParams &e) {
 	return UI::EVENT_DONE;
 }
 
-UI::EventReturn CreditsScreen::OnTwitter(UI::EventParams &e) {
+UI::EventReturn CreditsScreen::OnX(UI::EventParams &e) {
+	// Not sure we should change to x.com here, given various platform URL handlers etc. We can probably change it soon.
 	System_LaunchUrl(LaunchUrlType::BROWSER_URL, "https://twitter.com/PPSSPP_emu");
 	return UI::EVENT_DONE;
 }

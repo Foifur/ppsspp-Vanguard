@@ -19,22 +19,7 @@
 
 #include "ppsspp_config.h"
 
-#include "Common/CPUDetect.h"
-#include "Common/Common.h"
-#include "Common/Log.h"
-
-#ifdef _M_SSE
-#include <emmintrin.h>
-#endif
-#if PPSSPP_ARCH(ARM_NEON)
-
-#if defined(_MSC_VER) && PPSSPP_ARCH(ARM64)
-#include <arm64_neon.h>
-#else
-#include <arm_neon.h>
-#endif
-#endif
-
+#include "Common/Math/SIMDHeaders.h"
 #include "GPU/Common/IndexGenerator.h"
 
 // Points don't need indexing...
@@ -47,11 +32,6 @@ const u8 IndexGenerator::indexedPrimitiveType[7] = {
 	GE_PRIM_TRIANGLES,
 	GE_PRIM_RECTANGLES,
 };
-
-void IndexGenerator::Setup(u16 *inds) {
-	this->indsBase_ = inds;
-	Reset();
-}
 
 void IndexGenerator::AddPrim(int prim, int vertexCount, int indexOffset, bool clockwise) {
 	switch (prim) {
@@ -198,6 +178,7 @@ void IndexGenerator::AddStrip(int numVerts, int indexOffset, bool clockwise) {
 #endif
 }
 
+// God of War uses this for text. Otherwise rare, not much reason to optimize.
 void IndexGenerator::AddFan(int numVerts, int indexOffset, bool clockwise) {
 	const int numTris = numVerts - 2;
 	u16 *outInds = inds_;

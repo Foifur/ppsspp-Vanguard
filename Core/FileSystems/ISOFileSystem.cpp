@@ -15,10 +15,9 @@
 // Official git repository and contact information can be found at
 // https://github.com/hrydgard/ppsspp and http://www.ppsspp.org/.
 
+#include <algorithm>
 #include <cstring>
 #include <cstdio>
-#include <ctype.h>
-#include <algorithm>
 
 #include "Common/CommonTypes.h"
 #include "Common/Serialize/Serializer.h"
@@ -461,7 +460,7 @@ PSPDevType ISOFileSystem::DevType(u32 handle) {
 	return type;
 }
 
-FileSystemFlags ISOFileSystem::Flags() {
+FileSystemFlags ISOFileSystem::Flags() const {
 	// TODO: Here may be a good place to force things, in case users recompress games
 	// as PBP or CSO when they were originally the other type.
 	return blockDevice->IsDisc() ? FileSystemFlags::UMD : FileSystemFlags::CARD;

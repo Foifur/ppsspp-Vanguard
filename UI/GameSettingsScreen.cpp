@@ -58,6 +58,7 @@
 #include "UI/Theme.h"
 #include "UI/RetroAchievementScreens.h"
 #include "UI/OnScreenDisplay.h"
+#include "UI/DiscordIntegration.h"
 
 #include "Common/File/FileUtil.h"
 #include "Common/File/AndroidContentURI.h"
@@ -77,7 +78,7 @@
 #include "GPU/Common/TextureReplacer.h"
 #include "GPU/Common/PostShader.h"
 #include "android/jni/TestRunner.h"
-#include "GPU/GPUInterface.h"
+#include "GPU/GPUCommon.h"
 #include "GPU/Common/FramebufferManagerCommon.h"
 
 #include "Core/Core.h" // for Core_IsStepping
@@ -457,6 +458,11 @@ void GameSettingsScreen::CreateGraphicsSettings(UI::ViewGroup *graphicsSettings)
 
 	PopupMultiChoice *skipGPUReadbacks = graphicsSettings->Add(new PopupMultiChoice(&g_Config.iSkipGPUReadbackMode, gr->T("Skip GPU Readbacks"), skipGpuReadbackModes, 0, ARRAY_SIZE(skipGpuReadbackModes), I18NCat::GRAPHICS, screenManager()));
 	skipGPUReadbacks->SetDisabledPtr(&g_Config.bSoftwareRendering);
+
+	static const char *depthRasterModes[] = { "Auto (default)", "Low", "Off", "Always on" };
+
+	PopupMultiChoice *depthRasterMode = graphicsSettings->Add(new PopupMultiChoice(&g_Config.iDepthRasterMode, gr->T("Lens flare occlusion"), depthRasterModes, 0, ARRAY_SIZE(depthRasterModes), I18NCat::GRAPHICS, screenManager()));
+	depthRasterMode->SetDisabledPtr(&g_Config.bSoftwareRendering);
 
 	CheckBox *texBackoff = graphicsSettings->Add(new CheckBox(&g_Config.bTextureBackoffCache, gr->T("Lazy texture caching", "Lazy texture caching (speedup)")));
 	texBackoff->SetDisabledPtr(&g_Config.bSoftwareRendering);
@@ -915,7 +921,10 @@ void GameSettingsScreen::CreateNetworkingSettings(UI::ViewGroup *networkingSetti
 		wlanChannelChoice->HideChoice(i + 2);
 		wlanChannelChoice->HideChoice(i + 7);
 	}
-	networkingSettings->Add(new CheckBox(&g_Config.bDiscordPresence, n->T("Send Discord Presence information")));
+
+	if (Discord::IsAvailable()) {
+		networkingSettings->Add(new CheckBox(&g_Config.bDiscordRichPresence, n->T("Send Discord Presence information")));
+	}
 
 	networkingSettings->Add(new ItemHeader(n->T("AdHoc Server")));
 	networkingSettings->Add(new CheckBox(&g_Config.bEnableAdhocServer, n->T("Enable built-in PRO Adhoc Server", "Enable built-in PRO Adhoc Server")));
@@ -1001,7 +1010,7 @@ void GameSettingsScreen::CreateToolsSettings(UI::ViewGroup *tools) {
 
 	tools->Add(new ItemHeader(ms->T("Tools")));
 
-	const bool showRetroAchievements = true;
+	const bool showRetroAchievements = true; // System_GetPropertyInt(SYSPROP_DEVICE_TYPE) != DEVICE_TYPE_VR;
 	if (showRetroAchievements) {
 		auto retro = tools->Add(new Choice(sy->T("RetroAchievements")));
 		retro->OnClick.Add([=](UI::EventParams &) -> UI::EventReturn {
@@ -1098,6 +1107,11 @@ void GameSettingsScreen::CreateSystemSettings(UI::ViewGroup *systemSettings) {
 	PopupMultiChoiceDynamic *theme = systemSettings->Add(new PopupMultiChoiceDynamic(&g_Config.sThemeName, sy->T("Theme"), GetThemeInfoNames(), I18NCat::THEMES, screenManager()));
 	theme->OnChoice.Add([=](EventParams &e) {
 		UpdateTheme(screenManager()->getUIContext());
+		// Reset the tint/saturation if the theme changed.
+		if (e.b) {
+			g_Config.fUITint = 0.0f;
+			g_Config.fUISaturation = 1.0f;
+		}
 		return UI::EVENT_CONTINUE;
 	});
 
@@ -1144,7 +1158,7 @@ void GameSettingsScreen::CreateSystemSettings(UI::ViewGroup *systemSettings) {
 #if PPSSPP_PLATFORM(ANDROID)
 	if (System_GetPropertyInt(SYSPROP_DEVICE_TYPE) != DEVICE_TYPE_VR) {
 		memstickDisplay_ = g_Config.memStickDirectory.ToVisualString();
-		auto memstickPath = systemSettings->Add(new ChoiceWithValueDisplay(&memstickDisplay_, sy->T("Memory Stick folder", "Memory Stick folder"), I18NCat::NONE));
+		auto memstickPath = systemSettings->Add(new ChoiceWithValueDisplay(&memstickDisplay_, sy->T("Memory Stick folder"), I18NCat::NONE));
 		memstickPath->SetEnabled(!PSP_IsInited());
 		memstickPath->OnClick.Handle(this, &GameSettingsScreen::OnShowMemstickScreen);
 
@@ -1161,16 +1175,16 @@ void GameSettingsScreen::CreateSystemSettings(UI::ViewGroup *systemSettings) {
 #elif defined(_WIN32)
 #if PPSSPP_PLATFORM(UWP)
 	memstickDisplay_ = g_Config.memStickDirectory.ToVisualString();
-	auto memstickPath = systemSettings->Add(new ChoiceWithValueDisplay(&memstickDisplay_, sy->T("Memory Stick folder", "Memory Stick folder"), I18NCat::NONE));
+	auto memstickPath = systemSettings->Add(new ChoiceWithValueDisplay(&memstickDisplay_, sy->T("Memory Stick folder"), I18NCat::NONE));
 	memstickPath->SetEnabled(!PSP_IsInited());
 	memstickPath->OnClick.Handle(this, &GameSettingsScreen::OnShowMemstickScreen);
 #else
-	SavePathInMyDocumentChoice = systemSettings->Add(new CheckBox(&installed_, sy->T("Save path in My Documents", "Save path in My Documents")));
+	SavePathInMyDocumentChoice = systemSettings->Add(new CheckBox(&installed_, sy->T("Memory Stick in My Documents")));
 	SavePathInMyDocumentChoice->SetEnabled(!PSP_IsInited());
-	SavePathInMyDocumentChoice->OnClick.Handle(this, &GameSettingsScreen::OnSavePathMydoc);
-	SavePathInOtherChoice = systemSettings->Add(new CheckBox(&otherinstalled_, sy->T("Save path in installed.txt", "Save path in installed.txt")));
+	SavePathInMyDocumentChoice->OnClick.Handle(this, &GameSettingsScreen::OnMemoryStickMyDoc);
+	SavePathInOtherChoice = systemSettings->Add(new CheckBox(&otherinstalled_, sy->T("Memory Stick in installed.txt")));
 	SavePathInOtherChoice->SetEnabled(false);
-	SavePathInOtherChoice->OnClick.Handle(this, &GameSettingsScreen::OnSavePathOther);
+	SavePathInOtherChoice->OnClick.Handle(this, &GameSettingsScreen::OnMemoryStickOther);
 	const bool myDocsExists = W32Util::UserDocumentsPath().size() != 0;
 
 	const Path &PPSSPPpath = File::GetExeDirectory();
@@ -1380,7 +1394,7 @@ UI::EventReturn GameSettingsScreen::OnShowMemstickScreen(UI::EventParams &e) {
 
 #if defined(_WIN32) && !PPSSPP_PLATFORM(UWP)
 
-UI::EventReturn GameSettingsScreen::OnSavePathMydoc(UI::EventParams &e) {
+UI::EventReturn GameSettingsScreen::OnMemoryStickMyDoc(UI::EventParams &e) {
 	const Path &PPSSPPpath = File::GetExeDirectory();
 	const Path installedFile = PPSSPPpath / "installed.txt";
 	installed_ = File::Exists(installedFile);
@@ -1407,7 +1421,7 @@ UI::EventReturn GameSettingsScreen::OnSavePathMydoc(UI::EventParams &e) {
 	return UI::EVENT_DONE;
 }
 
-UI::EventReturn GameSettingsScreen::OnSavePathOther(UI::EventParams &e) {
+UI::EventReturn GameSettingsScreen::OnMemoryStickOther(UI::EventParams &e) {
 	const Path &PPSSPPpath = File::GetExeDirectory();
 	if (otherinstalled_) {
 		auto di = GetI18NCategory(I18NCat::DIALOG);
@@ -1843,7 +1857,7 @@ void DeveloperToolsScreen::CreateViews() {
 	cpuTests->SetEnabled(TestsAvailable());
 #endif
 
-	list->Add(new CheckBox(&g_Config.bUseNewAtrac, dev->T("Use experimental sceAtrac")));
+	// list->Add(new CheckBox(&g_Config.bUseExperimentalAtrac, dev->T("Use experimental sceAtrac")));
 
 	AddOverlayList(list, screenManager());
 
@@ -1897,7 +1911,7 @@ void DeveloperToolsScreen::CreateViews() {
 	static const char *framerateModes[] = { "Default", "Request 60Hz", "Force 60Hz" };
 	PopupMultiChoice *framerateMode = list->Add(new PopupMultiChoice(&g_Config.iDisplayFramerateMode, gr->T("Framerate mode"), framerateModes, 0, ARRAY_SIZE(framerateModes), I18NCat::GRAPHICS, screenManager()));
 	framerateMode->SetEnabledFunc([]() { return System_GetPropertyInt(SYSPROP_SYSTEMVERSION) >= 30; });
-	framerateMode->OnChoice.Add([this](UI::EventParams &e) {
+	framerateMode->OnChoice.Add([](UI::EventParams &e) {
 		System_Notify(SystemNotification::FORCE_RECREATE_ACTIVITY);
 		return UI::EVENT_DONE;
 	});
@@ -2081,6 +2095,7 @@ UI::EventReturn DeveloperToolsScreen::OnLoggingChanged(UI::EventParams &e) {
 }
 
 UI::EventReturn DeveloperToolsScreen::OnRunCPUTests(UI::EventParams &e) {
+	// TODO: If game is loaded, don't do anything.
 #if !PPSSPP_PLATFORM(UWP)
 	RunTests();
 #endif

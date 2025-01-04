@@ -15,23 +15,19 @@
 // Official git repository and contact information can be found at
 // https://github.com/hrydgard/ppsspp and http://www.ppsspp.org/.
 
+#include "ppsspp_config.h"
 #include <algorithm>
 #include <limits>
 
-#include "Common/System/Display.h"
-
-#include "Common/StringUtils.h"
-#include "Core/Config.h"
 #include "Core/ConfigValues.h"
 #include "Core/System.h"
+#include "Core/Config.h"
+#include "Core/Reporting.h"
 
 #include "GPU/ge_constants.h"
 #include "GPU/GPUState.h"
 #include "GPU/Math3D.h"
-#include "GPU/Common/FramebufferManagerCommon.h"
 #include "GPU/Common/PresentationCommon.h"
-#include "GPU/Common/ShaderId.h"
-#include "GPU/Common/VertexDecoderCommon.h"
 
 #include "GPU/Common/GPUStateUtils.h"
 
@@ -91,7 +87,7 @@ bool IsAlphaTestTriviallyTrue() {
 			return false;
 		}
 		// Fallthrough on purpose
-
+		[[fallthrough]];
 	case GE_COMP_GREATER:
 	{
 		// If the texture and vertex only use 1.0 alpha, then the ref value doesn't matter.
@@ -293,11 +289,10 @@ ReplaceBlendType ReplaceBlendWithShader(GEBufferFormat bufferFormat) {
 	case GE_BLENDMODE_MUL_AND_ADD:
 	case GE_BLENDMODE_MUL_AND_SUBTRACT:
 	case GE_BLENDMODE_MUL_AND_SUBTRACT_REVERSE:
-		// Handled below.
+		// Other blend equations simply don't blend on hardware.
 		break;
 
 	default:
-		// Other blend equations simply don't blend on hardware.
 		return REPLACE_BLEND_NO;
 	}
 
@@ -849,6 +844,8 @@ static const BlendEq eqLookupNoMinMax[] = {
 	BlendEq::ADD,			// GE_BLENDMODE_MIN
 	BlendEq::ADD,			// GE_BLENDMODE_MAX
 	BlendEq::ADD,			// GE_BLENDMODE_ABSDIFF
+	BlendEq::ADD,
+	BlendEq::ADD,
 };
 
 static const BlendEq eqLookup[] = {
@@ -858,6 +855,8 @@ static const BlendEq eqLookup[] = {
 	BlendEq::MIN,			// GE_BLENDMODE_MIN
 	BlendEq::MAX,			// GE_BLENDMODE_MAX
 	BlendEq::MAX,			// GE_BLENDMODE_ABSDIFF
+	BlendEq::ADD,
+	BlendEq::ADD,
 };
 
 static BlendFactor toDualSource(BlendFactor blendfunc) {
@@ -1321,7 +1320,7 @@ static void ConvertBlendState(GenericBlendState &blendState, bool forceReplaceBl
 
 	// Some Android devices (especially old Mali, it seems) composite badly if there's alpha in the backbuffer.
 	// So in non-buffered rendering, we will simply consider the dest alpha to be zero in blending equations.
-#ifdef __ANDROID__
+#if PPSSPP_PLATFORM(ANDROID)
 	if (g_Config.bSkipBufferEffects) {
 		if (glBlendFuncA == BlendFactor::DST_ALPHA) glBlendFuncA = BlendFactor::ZERO;
 		if (glBlendFuncB == BlendFactor::DST_ALPHA) glBlendFuncB = BlendFactor::ZERO;

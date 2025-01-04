@@ -1180,7 +1180,7 @@ void spread_message(SceNetAdhocctlUserNode *user, const char *message)
 			}
 
 			// Chat Packet
-			SceNetAdhocctlChatPacketS2C packet;
+			SceNetAdhocctlChatPacketS2C packet{};
 
 			// Set Chat Opcode
 			packet.base.base.opcode = OPCODE_CHAT;
@@ -2081,10 +2081,12 @@ int server_loop(int server)
 		}
 
 		// Prevent needless CPU Overload (1ms Sleep)
-		sleep_ms(10);
+		// !!!! COMMENT NOT REFLECTING REALITY
+		sleep_ms(10, "pro-adhoc-poll");
 
 		// Don't do anything if it's paused, otherwise the log will be flooded
-		while (adhocServerRunning && Core_IsStepping() && coreState != CORE_POWERDOWN) sleep_ms(10);
+		while (adhocServerRunning && Core_IsStepping() && coreState != CORE_POWERDOWN)
+			sleep_ms(10, "pro-adhot-paused-poll");
 	}
 
 	// Free User Database Memory

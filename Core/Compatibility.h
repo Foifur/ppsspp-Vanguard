@@ -112,6 +112,7 @@ struct CompatFlags {
 	bool DisableMemcpySlicing;
 	bool ForceEnableGPUReadback;
 	bool UseFFMPEGFindStreamInfo;
+	bool SoftwareRasterDepth;
 };
 
 struct VRCompat {
@@ -139,6 +140,10 @@ public:
 
 	void Load(const std::string &gameID);
 
+	const std::string &GetActiveFlagsString() const {
+		return activeList_;
+	}
+
 private:
 	void Clear();
 	void CheckSettings(IniFile &iniFile, const std::string &gameID);
@@ -150,4 +155,5 @@ private:
 	CompatFlags flags_{};
 	VRCompat vrCompat_{};
 	std::set<std::string> ignored_;
+	std::string activeList_;
 };

@@ -25,7 +25,7 @@
 
 // for _mm_pause
 #if PPSSPP_ARCH(X86) || PPSSPP_ARCH(AMD64)
-#include <immintrin.h>
+#include <emmintrin.h>
 #endif
 
 #include <ctime>
@@ -251,7 +251,8 @@ double Instant::ElapsedSeconds() const {
 
 #endif
 
-void sleep_ms(int ms) {
+void sleep_ms(int ms, const char *reason) {
+	// INFO_LOG(Log::System, "Sleep %d ms: %s", ms, reason);
 #ifdef _WIN32
 	Sleep(ms);
 #elif defined(HAVE_LIBNX)

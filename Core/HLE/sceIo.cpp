@@ -15,6 +15,7 @@
 // Official git repository and contact information can be found at
 // https://github.com/hrydgard/ppsspp and http://www.ppsspp.org/.
 
+#include <algorithm> // std::remove
 #include <cstdlib>
 #include <set>
 #include <thread>
@@ -80,6 +81,10 @@ static const int ERROR_ERRNO_IO_ERROR                     = 0x80010005;
 static const int ERROR_MEMSTICK_DEVCTL_BAD_PARAMS         = 0x80220081;
 static const int ERROR_MEMSTICK_DEVCTL_TOO_MANY_CALLBACKS = 0x80220082;
 static const int ERROR_PGD_INVALID_HEADER                 = 0x80510204;
+
+// TODO: Should actually report the real free space like we do in the savedata code.
+static constexpr int FAKE_FREE_SPACE = (1024 + 512) * 1024 * 1024;
+
 /*
 
 TODO: async io is missing features!
@@ -1853,7 +1858,8 @@ static u32 sceIoDevctl(const char *name, int cmd, u32 argAddr, int argLen, u32 o
 				u32 sectorSize = 0x200;
 				u32 memStickSectorSize = 32 * 1024;
 				u32 sectorCount = memStickSectorSize / sectorSize;
-				u64 freeSize = 1 * 1024 * 1024 * 1024;
+				
+				u64 freeSize = FAKE_FREE_SPACE;
 
 				auto deviceSize = PSPPointer<DeviceSize>::Create(pointer);
 				if (deviceSize.IsValid()) {
@@ -1992,7 +1998,7 @@ static u32 sceIoDevctl(const char *name, int cmd, u32 argAddr, int argLen, u32 o
 				u32 sectorSize = 0x200;
 				u32 memStickSectorSize = 32 * 1024;
 				u32 sectorCount = memStickSectorSize / sectorSize;
-				u64 freeSize = 1 * 1024 * 1024 * 1024;
+				u64 freeSize = FAKE_FREE_SPACE;
 
 				auto deviceSize = PSPPointer<DeviceSize>::Create(pointer);
 				if (deviceSize.IsValid()) {
@@ -2461,6 +2467,7 @@ static u32 sceIoDopen(const char *path) {
 			"TEXTURES",
 			"DUMP",
 			"SHADERS",
+			"DRIVERS",
 		};
 		std::vector<PSPFileInfo> filtered;
 		for (const auto &entry : dir->listing) {

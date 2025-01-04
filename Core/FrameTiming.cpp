@@ -26,16 +26,17 @@
 #include "Core/RetroAchievements.h"
 #include "Core/CoreParameter.h"
 #include "Core/Core.h"
+#include "Core/System.h"
 #include "Core/Config.h"
 #include "Core/HW/Display.h"
 #include "Core/FrameTiming.h"
 
 FrameTiming g_frameTiming;
 
-void WaitUntil(double now, double timestamp) {
+void WaitUntil(double now, double timestamp, const char *reason) {
 #ifdef _WIN32
 	while (time_now_d() < timestamp) {
-		sleep_ms(1); // Sleep for 1ms on this thread
+		sleep_ms(1, reason); // Sleep for 1ms on this thread
 	}
 #else
 	const double left = timestamp - now;
@@ -71,7 +72,7 @@ void FrameTiming::DeferWaitUntil(double until, double *curTimePtr) {
 
 void FrameTiming::PostSubmit() {
 	if (waitUntil_ != 0.0) {
-		WaitUntil(time_now_d(), waitUntil_);
+		WaitUntil(time_now_d(), waitUntil_, "post-submit");
 		if (curTimePtr_) {
 			*curTimePtr_ = waitUntil_;
 			curTimePtr_ = nullptr;

@@ -75,12 +75,19 @@
 
 static const int atracDecodeDelay = 2300;
 
-const int PSP_NUM_ATRAC_IDS = 6;
 static bool atracInited = true;
 static AtracBase *atracContexts[PSP_NUM_ATRAC_IDS];
 static u32 atracContextTypes[PSP_NUM_ATRAC_IDS];
 static int atracLibVersion = 0;
 static u32 atracLibCrc = 0;
+
+// For debugger only.
+const AtracBase *__AtracGetCtx(int i, u32 *type) {
+	if (type) {
+		*type = atracContextTypes[i];
+	}
+	return atracContexts[i];
+}
 
 void __AtracInit() {
 	_assert_(sizeof(SceAtracContext) == 256);
@@ -138,7 +145,7 @@ void __AtracDoState(PointerWrap &p) {
 }
 
 static AtracBase *allocAtrac(bool forceOld = false) {
-	if (g_Config.bUseNewAtrac && !forceOld) {
+	if (g_Config.bUseExperimentalAtrac && !forceOld) {
 		return new Atrac2();
 	} else {
 		return new Atrac();
@@ -938,7 +945,7 @@ static int sceAtracLowLevelInitDecoder(int atracID, u32 paramsAddr) {
 			}
 		}
 		if (!found) {
-			ERROR_LOG_REPORT(Log::ME, "AT3 header map lacks entry for bpf: %i  channels: %i", atrac->GetTrack().BytesPerFrame(), atrac->GetTrack().channels);
+			WARN_LOG_REPORT_ONCE(at3headermap, Log::ME, "AT3 header map lacks entry for bpf: %i  channels: %i", atrac->GetTrack().BytesPerFrame(), atrac->GetTrack().channels);
 			// TODO: Should we return an error code for these values?
 		}
 	}

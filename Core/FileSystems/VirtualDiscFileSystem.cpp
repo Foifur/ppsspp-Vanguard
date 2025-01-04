@@ -26,7 +26,6 @@
 
 #include "Common/File/FileUtil.h"
 #include "Common/File/DirListing.h"
-#include "Common/StringUtils.h"
 #include "Common/Serialize/Serializer.h"
 #include "Common/Serialize/SerializeFuncs.h"
 #include "Common/SysError.h"
@@ -243,7 +242,7 @@ void VirtualDiscFileSystem::DoState(PointerWrap &p)
 	// We don't savestate handlers (loaded on fs load), but if they change, it may not load properly.
 }
 
-Path VirtualDiscFileSystem::GetLocalPath(std::string localpath) {
+Path VirtualDiscFileSystem::GetLocalPath(std::string localpath) const {
 	if (localpath.empty())
 		return basePath;
 
@@ -303,18 +302,14 @@ int VirtualDiscFileSystem::getFileListIndex(std::string &fileName)
 	return (int)fileList.size()-1;
 }
 
-int VirtualDiscFileSystem::getFileListIndex(u32 accessBlock, u32 accessSize, bool blockMode)
-{
-	for (size_t i = 0; i < fileList.size(); i++)
-	{
-		if (fileList[i].firstBlock <= accessBlock)
-		{
+int VirtualDiscFileSystem::getFileListIndex(u32 accessBlock, u32 accessSize, bool blockMode) const {
+	for (size_t i = 0; i < fileList.size(); i++) {
+		if (fileList[i].firstBlock <= accessBlock) {
 			u32 sectorOffset = (accessBlock-fileList[i].firstBlock)*2048;
 			u32 totalFileSize = blockMode ? (fileList[i].totalSize+2047) & ~2047 : fileList[i].totalSize;
 
 			u32 endOffset = sectorOffset+accessSize;
-			if (endOffset <= totalFileSize)
-			{
+			if (endOffset <= totalFileSize) {
 				return (int)i;
 			}
 		}

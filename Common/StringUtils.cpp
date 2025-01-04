@@ -20,9 +20,7 @@
 #include "ppsspp_config.h"
 
 #ifdef _WIN32
-#include <windows.h>
-#undef min
-#undef max
+#include "Common/CommonWindows.h"
 #endif
 
 #if PPSSPP_PLATFORM(SWITCH)
@@ -32,11 +30,8 @@
 
 #include <cstdarg>
 
-#include <cerrno>
-
 #include <string>
 #include <sstream>
-#include <climits>
 
 #include <algorithm>
 #include <iomanip>
@@ -98,6 +93,16 @@ bool containsNoCase(std::string_view haystack, std::string_view needle) {
 	auto pred = [](char ch1, char ch2) { return std::toupper(ch1) == std::toupper(ch2); };
 	auto found = std::search(haystack.begin(), haystack.end(), needle.begin(), needle.end(), pred);
 	return found != haystack.end();
+}
+
+int countChar(std::string_view haystack, char needle) {
+	int count = 0;
+	for (int i = 0; i < haystack.size(); i++) {
+		if (haystack[i] == needle) {
+			count++;
+		}
+	}
+	return count;
 }
 
 bool CharArrayFromFormatV(char* out, int outsize, const char* format, va_list args)

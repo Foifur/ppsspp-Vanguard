@@ -9,15 +9,14 @@
 #include "Common/Render/DrawBuffer.h"
 #include "Common/Math/math_util.h"
 #include "Common/UI/IconCache.h"
+#include "Common/StringUtils.h"
 #include "UI/RetroAchievementScreens.h"
 #include "UI/DebugOverlay.h"
-#include "UI/Root.h"
 
 #include "Common/UI/Context.h"
 #include "Common/System/OSD.h"
 
 #include "Common/TimeUtil.h"
-#include "Common/Net/HTTPClient.h"
 #include "Core/Config.h"
 
 static inline const char *DeNull(const char *ptr) {
@@ -300,6 +299,7 @@ void OnScreenMessagesView::Draw(UIContext &dc) {
 	typeEdges[(size_t)OSDType::MESSAGE_CENTERED_WARNING] = ScreenEdgePosition::CENTER;
 	typeEdges[(size_t)OSDType::MESSAGE_CENTERED_ERROR] = ScreenEdgePosition::CENTER;
 
+	dc.SetFontStyle(dc.theme->uiFont);
 	dc.SetFontScale(1.0f, 1.0f);
 
 	// First pass: Measure all the sides.

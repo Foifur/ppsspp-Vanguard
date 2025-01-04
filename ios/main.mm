@@ -35,6 +35,7 @@
 #include "Common/Thread/ThreadUtil.h"
 #include "Core/Config.h"
 #include "Common/Log.h"
+#include "Common/Log/LogManager.h"
 #include "UI/DarwinFileSystemServices.h"
 
 // Compile out all the hackery in app store builds.
@@ -417,7 +418,7 @@ bool System_MakeRequest(SystemRequestType type, int requestId, const std::string
         dispatch_async(dispatch_get_main_queue(), ^{
 			[(AppDelegate *)[[UIApplication sharedApplication] delegate] restart:param1.c_str()];
 		});
-		break;
+		return true;
 
 	case SystemRequestType::EXIT_APP:
 		// NOTE: on iOS, this is considered a crash and not a valid way to exit.
@@ -508,8 +509,9 @@ bool System_MakeRequest(SystemRequestType type, int requestId, const std::string
         });
 		return true;
 	default:
-		return false;
+		break;
 	}
+	return false;
 }
 
 void System_Toast(std::string_view text) {}
@@ -576,6 +578,8 @@ int main(int argc, char *argv[])
 		// Just set it to 14.0 if the parsing fails for whatever reason.
 		g_iosVersionMajor = 14;
 	}
+
+	g_logManager.EnableOutput(LogOutput::Stdio);
 
 #if PPSSPP_PLATFORM(IOS_APP_STORE)
 	g_jitAvailable = false;

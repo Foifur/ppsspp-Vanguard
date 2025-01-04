@@ -71,6 +71,7 @@ void Shutdown()
 #endif
 }
 
+// NOTE: Due to the nature of getaddrinfo, this can block indefinitely. Not good.
 bool DNSResolve(const std::string &host, const std::string &service, addrinfo **res, std::string &error, DNSType type) {
 #if PPSSPP_PLATFORM(SWITCH)
 	// Force IPv4 lookups.
@@ -104,7 +105,7 @@ bool DNSResolve(const std::string &host, const std::string &service, addrinfo **
 	int result = getaddrinfo(host.c_str(), servicep, &hints, res);
 	if (result == EAI_AGAIN) {
 		// Temporary failure.  Since this already blocks, let's just try once more.
-		sleep_ms(1);
+		sleep_ms(1, "dns-resolve-poll");
 		result = getaddrinfo(host.c_str(), servicep, &hints, res);
 	}
 

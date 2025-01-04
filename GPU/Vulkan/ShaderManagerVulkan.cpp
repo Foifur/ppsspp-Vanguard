@@ -20,30 +20,19 @@
 #endif
 
 #include "Common/LogReporting.h"
-#include "Common/Math/lin/matrix4x4.h"
-#include "Common/Math/math_util.h"
-#include "Common/Data/Convert/SmallDataConvert.h"
 #include "Common/Profiler/Profiler.h"
 #include "Common/GPU/thin3d.h"
-#include "Common/Data/Encoding/Utf8.h"
-#include "Common/TimeUtil.h"
 #include "Common/MemoryUtil.h"
 
 #include "Common/StringUtils.h"
 #include "Common/GPU/Vulkan/VulkanContext.h"
-#include "Common/GPU/Vulkan/VulkanMemory.h"
 #include "Common/Log.h"
-#include "Common/CommonTypes.h"
-#include "Core/Config.h"
-#include "GPU/Math3D.h"
 #include "GPU/GPUState.h"
-#include "GPU/ge_constants.h"
 #include "GPU/Common/FragmentShaderGenerator.h"
 #include "GPU/Common/VertexShaderGenerator.h"
 #include "GPU/Common/GeometryShaderGenerator.h"
 #include "GPU/Vulkan/ShaderManagerVulkan.h"
 #include "GPU/Vulkan/DrawEngineVulkan.h"
-#include "GPU/Vulkan/FramebufferManagerVulkan.h"
 
 // Most drivers treat vkCreateShaderModule as pretty much a memcpy. What actually
 // takes time here, and makes this worthy of parallelization, is GLSLtoSPV.
@@ -216,6 +205,7 @@ ShaderManagerVulkan::ShaderManagerVulkan(Draw::DrawContext *draw)
 	uboAlignment_ = vulkan->GetPhysicalDeviceProperties().properties.limits.minUniformBufferOffsetAlignment;
 
 	uniforms_ = (Uniforms *)AllocateAlignedMemory(sizeof(Uniforms), 16);
+	_assert_(uniforms_);
 
 	static_assert(sizeof(uniforms_->ub_base) <= 512, "ub_base grew too big");
 	static_assert(sizeof(uniforms_->ub_lights) <= 512, "ub_lights grew too big");
@@ -501,7 +491,7 @@ enum class VulkanCacheDetectFlags {
 };
 
 #define CACHE_HEADER_MAGIC 0xff51f420 
-#define CACHE_VERSION 51
+#define CACHE_VERSION 52
 
 struct VulkanCacheHeader {
 	uint32_t magic;
